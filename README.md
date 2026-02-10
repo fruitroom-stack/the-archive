@@ -221,7 +221,7 @@ MIT License - Free to use, modify, and share!
 
 세련된 디자인과 강력한 워크플로우를 결합한 우아한 스크린샷 큐레이션 도구입니다. 설치 필요 없이 브라우저에서 바로 사용 가능!
 
-**라이브 데모:** [https://your-username.github.io/the-archive/](https://your-username.github.io/the-archive/)
+**라이브 데모:** [https://fruitroom-stack.github.io/the-archive/](https://fruitroom-stack.github.io/the-archive/)
 
 ---
 
