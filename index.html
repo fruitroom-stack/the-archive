@@ -21,9 +21,8 @@
         .top-floating-bar { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes slideDown { from { transform: translate(-50%, -120%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         .check-badge { position: absolute; top: 16px; left: 16px; width: 36px; height: 36px; background-color: #000; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 900; border: 3px solid #fff; z-index: 50; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-        .video-indicator { position: absolute; bottom: 14px; right: 14px; background: rgba(0,0,0,0.8); color: white; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: bold; z-index: 10; }
         .pill-btn { font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 10px 22px; border-radius: 9999px; letter-spacing: 0.1em; transition: all 0.2s; }
-        .pill-btn-black { background-color: #000; color: #fff; }
+        .video-indicator { position: absolute; bottom: 14px; right: 14px; background: rgba(0,0,0,0.8); color: white; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: bold; z-index: 10; }
     </style>
 </head>
 <body>
@@ -39,7 +38,6 @@
           const [zoomedImage, setZoomedImage] = useState(null);
           const [isSelectMode, setIsSelectMode] = useState(false);
           const [selectedIds, setSelectedIds] = useState([]);
-          const [isModalOpen, setIsModalOpen] = useState(false);
           
           const [brandName, setBrandName] = useState('The Archive');
           const [curatorName, setCuratorName] = useState('Heewon');
@@ -52,41 +50,12 @@
             { id: 'cat6', name: '06. 업무/공부', color: '#4A4A4A' }
           ]);
 
-          // --- [비디오 썸네일 생성] ---
-          const generateVideoThumbnail = (file) => {
-            return new Promise((resolve) => {
-              const video = document.createElement('video');
-              const canvas = document.createElement('canvas');
-              video.preload = 'metadata';
-              video.muted = true;
-              video.playsInline = true;
-              video.src = URL.createObjectURL(file);
-              video.onloadeddata = () => { video.currentTime = 0.5; };
-              video.onseeked = () => {
-                canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL('image/jpeg'));
-              };
-              video.onerror = () => resolve(null);
-            });
+          // --- [데이터 제어] ---
+          const handleBackup = () => {
+            const data = JSON.stringify({ screenshots, brandName, curatorName, categories }, null, 2);
+            saveAs(new Blob([data], { type: 'application/json' }), "backup.json");
           };
 
-          const handleFileUpload = async (e) => {
-            const files = Array.from(e.target.files);
-            const processed = await Promise.all(files.map(async file => {
-              const isVideo = file.type.startsWith('video/');
-              return {
-                id: Math.random().toString(36).substr(2, 9),
-                preview: URL.createObjectURL(file),
-                thumbnail: isVideo ? await generateVideoThumbnail(file) : null,
-                mediaType: isVideo ? 'video' : 'image',
-                note: '', date: new Date().toISOString()
-              };
-            }));
-            setUploadedFiles(processed); setView('sort');
-          };
-
-          // --- [Import & Backup] ---
           const handleImport = (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -97,79 +66,81 @@
                 if (data.screenshots) setScreenshots(data.screenshots);
                 if (data.brandName) setBrandName(data.brandName);
                 if (data.curatorName) setCuratorName(data.curatorName);
-                alert("Restored successfully.");
+                alert("Restored.");
               } catch (err) { alert("Invalid file."); }
             };
             reader.readAsText(file);
           };
 
-          const handleBackup = () => {
-            const data = JSON.stringify({ screenshots, brandName, curatorName, categories }, null, 2);
-            saveAs(new Blob([data], { type: 'application/json' }), "archive-backup.json");
+          const handleFileUpload = (e) => {
+            const files = Array.from(e.target.files);
+            const processed = files.map(file => ({
+              id: Math.random().toString(36).substr(2, 9),
+              preview: URL.createObjectURL(file),
+              mediaType: file.type.startsWith('video/') ? 'video' : 'image',
+              note: '', date: new Date().toISOString()
+            }));
+            setUploadedFiles(processed); setView('sort');
           };
 
-          // --- [내보내기: PDF & ZIP] ---
           const handleExport = async (type) => {
-            const targetIds = selectedIds.length > 0 ? selectedIds : (view === 'sort' ? uploadedFiles.map(f => f.id) : screenshots.filter(s => s.category === selectedCategoryId).map(s => s.id));
-            const items = (view === 'sort' ? uploadedFiles : screenshots).filter(f => targetIds.includes(f.id));
-            
+            const items = (view === 'sort' ? uploadedFiles : screenshots).filter(f => selectedIds.includes(f.id));
+            if (items.length === 0) return;
+
             if (type === 'pdf') {
-              const name = prompt("Enter PDF filename:", "Archive_Export");
+              const name = prompt("Filename:", "Archive_Export");
               if (!name) return;
               const { jsPDF } = window.jspdf;
               const doc = new jsPDF();
               items.forEach((s, i) => {
                 if (i > 0) doc.addPage();
-                if (s.mediaType === 'image') doc.addImage(s.preview, 'JPEG', 15, 15, 180, 100);
+                if (s.mediaType === 'image') try { doc.addImage(s.preview, 'JPEG', 15, 15, 180, 100); } catch(e){}
                 else doc.text("[Video Content]", 15, 50);
                 doc.text(s.note || "", 15, 125);
               });
               doc.save(`${name}.pdf`);
             } else {
               const zip = new JSZip();
-              const folder = zip.folder("Archive_Export");
-              await Promise.all(items.map(async (item, idx) => {
-                const response = await fetch(item.mediaType === 'video' ? item.preview : (item.thumbnail || item.preview));
-                const blob = await response.blob();
-                folder.file(`media_${idx+1}.${item.mediaType === 'video' ? 'mp4' : 'jpg'}`, blob);
-              }));
+              for(let i=0; i<items.length; i++) {
+                const res = await fetch(items[i].preview);
+                const blob = await res.blob();
+                zip.file(`media_${i+1}.${items[i].mediaType === 'video' ? 'mp4' : 'jpg'}`, blob);
+              }
               const content = await zip.generateAsync({type: "blob"});
-              saveAs(content, "archive-export.zip");
+              saveAs(content, "export.zip");
             }
           };
 
           return (
             <div className="min-h-screen">
-              {/* 상단 플로팅 바 (선택 모드) */}
+              {/* 상단바 (Select 시 노출) */}
               {isSelectMode && selectedIds.length > 0 && (
                 <div className="top-floating-bar bg-black text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-10">
                   <span className="text-[12px] font-black border-r border-gray-700 pr-10">{selectedIds.length} SELECTED</span>
                   <button onClick={() => handleExport('pdf')} className="text-[11px] font-bold uppercase hover:text-blue-400">PDF</button>
                   <button onClick={() => handleExport('zip')} className="text-[11px] font-bold uppercase hover:text-yellow-400">ZIP</button>
                   <button onClick={() => {
-                    if(confirm("Delete selection?")) {
-                      if(view === 'sort') setUploadedFiles(prev => prev.filter(f => !selectedIds.includes(f.id)));
-                      else setScreenshots(prev => prev.filter(s => !selectedIds.includes(s.id)));
-                      setSelectedIds([]);
-                    }
+                    if(view === 'sort') setUploadedFiles(prev => prev.filter(f => !selectedIds.includes(f.id)));
+                    else setScreenshots(prev => prev.filter(s => !selectedIds.includes(s.id)));
+                    setSelectedIds([]);
                   }} className="text-[11px] font-bold uppercase text-red-400">Trash</button>
                 </div>
               )}
 
-              {/* 1. HOME VIEW */}
+              {/* 1. HOME */}
               {view === 'home' && (
                 <div className="max-w-4xl mx-auto px-6 py-10 text-left">
                   <div className="flex justify-between items-start mb-12">
                     <div>
                       <h1 className="text-5xl italic font-light tracking-tight mb-2">{brandName}</h1>
-                      <p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold tracking-widest">Curated by {curatorName}</p>
+                      <p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold">Curated by {curatorName}</p>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={handleBackup} className="pill-btn bg-blue-50 text-blue-600">Export JSON</button>
                         <label className="pill-btn bg-gray-50 text-gray-400 cursor-pointer hover:bg-black hover:text-white transition-all">
                             Import JSON <input type="file" accept=".json" onChange={handleImport} className="hidden" />
                         </label>
-                        <button onClick={() => setView('settings')} className="pill-btn bg-gray-50 text-gray-400 hover:bg-black hover:text-white transition-all">Settings</button>
+                        <button onClick={() => setView('settings')} className="pill-btn bg-gray-50 text-gray-400 hover:bg-black hover:text-white">Settings</button>
                     </div>
                   </div>
                   <label className="w-full bg-black text-white py-12 rounded-3xl flex items-center justify-center cursor-pointer hover:opacity-90 font-bold uppercase shadow-2xl mb-16">
@@ -182,67 +153,48 @@
                               className="bg-white p-8 border border-gray-100 shadow-sm archive-card text-center transition-all hover:border-black">
                         <div className="w-14 h-14 rounded-full mb-6 mx-auto flex items-center justify-center text-white text-lg font-bold italic" style={{ backgroundColor: cat.color }}>{idx + 1}</div>
                         <div className="font-bold text-gray-900 text-base mb-1">{cat.name}</div>
-                        <div className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">
-                            {screenshots.filter(s => s.category === cat.id).length} Records
-                        </div>
+                        <div className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">{screenshots.filter(s => s.category === cat.id).length} Records</div>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* 2. SORT VIEW (Save All 복구) */}
+              {/* 2. SORT VIEW */}
               {view === 'sort' && (
                 <div className="max-w-4xl mx-auto px-6 py-24 text-left">
                   <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b border-gray-100">
                     <button onClick={() => {setView('home'); setUploadedFiles([]); setIsSelectMode(false);}} className="text-[11px] font-bold uppercase text-gray-400">← Exit</button>
                     <div className="flex gap-4">
-                        <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'bg-gray-100 text-gray-500'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
-                        {!isSelectMode && (
-                          <button onClick={() => {
-                              const news = uploadedFiles.map(f => ({ ...f, category: f.selectedCategory || categories[0].id }));
-                              setScreenshots(prev => [...prev, ...news]);
-                              setUploadedFiles([]); setView('home');
-                          }} className="pill-btn pill-btn-black shadow-lg">Save All</button>
-                        )}
-                        {isSelectMode && selectedIds.length > 0 && (
-                          <button onClick={() => setIsModalOpen(true)} className="pill-btn pill-btn-black">Archive Selection</button>
-                        )}
+                        <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'bg-black text-white' : 'bg-gray-100'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+                        <button onClick={() => {
+                            const news = uploadedFiles.map(f => ({ ...f, category: f.selectedCategory || categories[0].id }));
+                            setScreenshots(prev => [...prev, ...news]);
+                            setUploadedFiles([]); setView('home');
+                        }} className="pill-btn bg-black text-white shadow-lg">Save All</button>
                     </div>
                   </div>
                   {uploadedFiles.map(f => (
                     <div key={f.id} onClick={() => isSelectMode && (selectedIds.includes(f.id) ? setSelectedIds(selectedIds.filter(i => i !== f.id)) : setSelectedIds([...selectedIds, f.id]))} 
                          className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 transition-all ${selectedIds.includes(f.id) ? 'selected-card border-black' : 'shadow-sm'}`}>
-                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50">
-                        {f.mediaType === 'video' ? <img src={f.thumbnail} className="w-full h-full object-cover" /> : <img src={f.preview} className="w-full h-full object-cover" />}
+                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50 flex items-center justify-center">
+                        {f.mediaType === 'video' ? <video src={f.preview} className="w-full h-full object-cover" muted playsInline autoPlay loop /> : <img src={f.preview} className="w-full h-full object-cover" />}
                         {f.mediaType === 'video' && <div className="video-indicator">VIDEO</div>}
                         {isSelectMode && selectedIds.includes(f.id) && <div className="check-badge">✓</div>}
                       </div>
-                      <div className="w-full md:w-1/2 space-y-8" onClick={e => e.stopPropagation()}>
-                        <div className="grid grid-cols-2 gap-3">
+                      <div className="w-full md:w-1/2" onClick={e => e.stopPropagation()}>
+                        <div className="grid grid-cols-2 gap-3 mb-6">
                             {categories.map(c => <button key={c.id} onClick={() => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, selectedCategory: c.id} : i))} 
-                                className={`px-4 py-3 rounded-xl text-[10px] font-bold uppercase transition-all ${f.selectedCategory === c.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>{c.name}</button>)}
+                                className={`px-3 py-4 rounded-xl text-[10px] font-bold uppercase transition-all ${f.selectedCategory === c.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-400'}`}>{c.name}</button>)}
                         </div>
-                        <textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-3xl p-8 text-base outline-none min-h-[160px] italic" />
+                        <textarea placeholder="Write a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-3xl p-8 text-base outline-none min-h-[160px] italic" />
                       </div>
                     </div>
                   ))}
-                  {isModalOpen && (
-                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[2000]" onClick={() => setIsModalOpen(false)}>
-                        <div className="bg-white p-10 rounded-[2.5rem] w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
-                            {categories.map(c => <button key={c.id} onClick={() => {
-                                const news = uploadedFiles.filter(f => selectedIds.includes(f.id)).map(f => ({ ...f, category: c.id, date: new Date().toISOString() }));
-                                setScreenshots(prev => [...prev, ...news]);
-                                const rem = uploadedFiles.filter(f => !selectedIds.includes(f.id));
-                                setUploadedFiles(rem); setSelectedIds([]); setIsModalOpen(false); setIsSelectMode(false); if (rem.length === 0) setView('home');
-                            }} className="w-full py-4 mb-2 bg-gray-50 rounded-2xl text-[10px] font-bold uppercase hover:bg-black hover:text-white transition-all">{c.name}</button>)}
-                        </div>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {/* 3. CATEGORY VIEW (카테고리 바 고정) */}
+              {/* 3. CATEGORY VIEW */}
               {view === 'category' && (
                 <div className="max-w-6xl mx-auto px-6 py-24 text-left">
                   <div className="flex justify-between items-center mb-16">
@@ -252,7 +204,7 @@
                         {categories.map(c => <button key={c.id} onClick={() => setSelectedCategoryId(c.id)} 
                             className={`text-[11px] font-bold uppercase whitespace-nowrap ${selectedCategoryId === c.id ? 'text-black border-b-2 border-black' : 'text-gray-300 hover:text-black'}`}>{c.name}</button>)}
                     </div>
-                    <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'bg-gray-100 text-gray-500'}`}>{isSelectMode ? 'Cancel' : 'Select Items'}</button>
+                    <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'bg-black text-white' : 'bg-gray-100'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
                   </div>
                   <h2 className="text-7xl italic font-light tracking-tighter mb-20">{categories.find(c => c.id === selectedCategoryId)?.name}</h2>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-10">
@@ -260,33 +212,21 @@
                       <div key={s.id} onClick={() => isSelectMode ? (selectedIds.includes(s.id) ? setSelectedIds(selectedIds.filter(i => i !== s.id)) : setSelectedIds([...selectedIds, s.id])) : setZoomedImage(s)} 
                            className={`archive-card bg-white p-5 border border-gray-100 ${selectedIds.includes(s.id) ? 'selected-card border-black' : ''}`}>
                         <div className="aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden relative shadow-inner">
-                           {s.mediaType === 'video' ? <img src={s.thumbnail} className="w-full h-full object-cover" /> : <img src={s.preview} className="w-full h-full object-cover" />}
-                           {s.mediaType === 'video' && <div className="video-indicator">VIDEO</div>}
+                           {s.mediaType === 'video' ? <video src={s.preview} className="w-full h-full object-cover" muted playsInline autoPlay loop /> : <img src={s.preview} className="w-full h-full object-cover" />}
                            {isSelectMode && selectedIds.includes(s.id) && <div className="check-badge">✓</div>}
                         </div>
-                        <p className="mt-5 italic text-gray-500 truncate text-base">{s.note || 'Untitled'}</p>
+                        <p className="mt-5 italic text-gray-500 truncate">{s.note || 'Untitled'}</p>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* 4. ZOOM VIEW (비디오 재생 로직 포함) */}
+              {/* 4. ZOOM VIEW */}
               {zoomedImage && (
                 <div className="fixed inset-0 bg-black/98 z-[5000] flex items-center justify-center p-4" onClick={() => setZoomedImage(null)}>
-                  <div className="relative w-full h-full flex items-center justify-center">
-                    {zoomedImage.mediaType === 'video' ? (
-                        <video src={zoomedImage.preview} className="max-w-full max-h-full shadow-2xl" playsInline loop controls autoPlay />
-                    ) : (
-                        <img src={zoomedImage.preview} className="max-w-full max-h-full shadow-2xl object-contain" />
-                    )}
-                    <button onClick={() => setZoomedImage(null)} className="absolute top-6 right-8 text-white text-4xl hover:scale-110 transition-transform">✕</button>
-                    {zoomedImage.note && (
-                      <div className="absolute bottom-10 bg-black/60 backdrop-blur-md text-white p-8 rounded-3xl text-center max-w-2xl italic text-xl border border-white/10">
-                        {zoomedImage.note}
-                      </div>
-                    )}
-                  </div>
+                  {zoomedImage.mediaType === 'video' ? <video src={zoomedImage.preview} className="max-w-full max-h-full" playsInline loop controls autoPlay /> : <img src={zoomedImage.preview} className="max-w-full max-h-full object-contain" />}
+                  <button onClick={() => setZoomedImage(null)} className="absolute top-6 right-8 text-white text-4xl">✕</button>
                 </div>
               )}
             </div>
