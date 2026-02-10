@@ -15,6 +15,7 @@
     <style>
         body { margin: 0; padding: 0; background-color: #FDFCFB; font-family: 'Playfair Display', 'Noto Serif KR', serif; color: #1A1A1A; }
         button, input, textarea { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
         .archive-card { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; border-radius: 1.5rem; position: relative; }
         .archive-card:hover { transform: translateY(-8px); border-color: #000; }
         .category-icon { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: bold; font-style: italic; margin: 0 auto 1.5rem; box-shadow: inset 0 0 10px rgba(0,0,0,0.05); }
@@ -55,7 +56,7 @@
 
           const selectedCategory = useMemo(() => categories.find(c => c.id === selectedCategoryId), [selectedCategoryId]);
 
-          // 비디오 썸네일 기술
+          // 비디오 썸네일 추출 기술
           const extractThumb = (file) => {
             return new Promise((resolve) => {
               const video = document.createElement('video');
@@ -87,12 +88,16 @@
             setUploadedFiles(processed); setView('sort'); setSelectedIds([]); setIsSelectMode(false);
           };
 
+          const toggleId = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+
           const handleExport = async (type) => {
             const list = view === 'sort' ? uploadedFiles : screenshots.filter(s => s.category === selectedCategoryId);
             const items = list.filter(f => selectedIds.includes(f.id));
             if (items.length === 0) return;
 
             if (type === 'pdf') {
+              const name = prompt("Enter PDF filename:", "Archive_Export");
+              if (!name) return;
               const { jsPDF } = window.jspdf;
               const doc = new jsPDF();
               items.forEach((s, i) => {
@@ -101,7 +106,7 @@
                 else doc.text("[Video Content]", 15, 50);
                 doc.text(s.note || "", 15, 125);
               });
-              doc.save("archive.pdf");
+              doc.save(`${name}.pdf`);
             } else {
               const zip = new JSZip();
               for(let i=0; i<items.length; i++) {
@@ -168,6 +173,7 @@
                         {isSelectMode ? (
                             <>
                                 <button onClick={() => setSelectedIds(uploadedFiles.map(f => f.id))} className="pill-btn pill-btn-outline">Select All</button>
+                                <button onClick={() => handleExport('pdf')} className="pill-btn pill-btn-black">Download PDF</button>
                                 <button onClick={() => handleExport('zip')} className="pill-btn pill-btn-black">Download ZIP</button>
                                 <button onClick={() => setIsModalOpen(true)} className="pill-btn pill-btn-black">Archive Selected</button>
                             </>
