@@ -15,20 +15,24 @@
     <style>
         body { margin: 0; padding: 0; background-color: #FDFCFB; font-family: 'Playfair Display', 'Noto Serif KR', serif; color: #1A1A1A; }
         button, input, textarea { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .archive-card { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; border-radius: 1.5rem; position: relative; overflow: hidden; border: 1px solid #eee; }
-        .selected-card { border-color: #000 !important; transform: scale(0.96); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.15) !important; }
-        .top-floating-bar { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        @keyframes slideDown { from { transform: translate(-50%, -120%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-        .check-badge { position: absolute; top: 16px; left: 16px; width: 36px; height: 36px; background-color: #000; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 900; border: 3px solid #fff; z-index: 50; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-        .pill-btn { font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 10px 22px; border-radius: 9999px; letter-spacing: 0.1em; transition: all 0.2s; }
-        .video-indicator { position: absolute; bottom: 14px; right: 14px; background: rgba(0,0,0,0.8); color: white; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: bold; z-index: 10; }
+        .archive-card { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; border-radius: 1.5rem; position: relative; }
+        .archive-card:hover { transform: translateY(-8px); border-color: #000; }
+        .category-icon { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: bold; font-style: italic; margin: 0 auto 1.5rem; box-shadow: inset 0 0 10px rgba(0,0,0,0.05); }
+        .selected-item { outline: 4px solid #000 !important; outline-offset: -4px; transform: scale(0.97) !important; border-radius: 1.5rem !important; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2); }
+        .check-badge { position: absolute; top: 15px; left: 15px; width: 32px; height: 32px; background-color: #000; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 900; border: 2px solid #fff; z-index: 50; }
+        .pill-btn { font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 7px 18px; border-radius: 9999px; letter-spacing: 0.1em; transition: all 0.2s; }
+        .pill-btn-black { background-color: #000; color: #fff; border: 1px solid #000; }
+        .pill-btn-red { background-color: #ef4444; color: #fff; }
+        .pill-btn-green { background-color: #22c55e; color: #fff; }
+        .pill-btn-blue { background-color: #eff6ff; color: #2563eb; }
+        .pill-btn-outline { border: 1px solid #e5e7eb; color: #9ca3af; }
+        .video-indicator { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; z-index: 10; }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useMemo, useEffect } = React;
 
         function ScreenshotApp() {
           const [view, setView] = useState('home');
@@ -36,111 +40,87 @@
           const [uploadedFiles, setUploadedFiles] = useState([]);
           const [selectedCategoryId, setSelectedCategoryId] = useState(null);
           const [zoomedImage, setZoomedImage] = useState(null);
+          const [zoomedImageInSort, setZoomedImageInSort] = useState(null);
           const [isSelectMode, setIsSelectMode] = useState(false);
           const [selectedIds, setSelectedIds] = useState([]);
-          
+          const [sortBy, setSortBy] = useState('recent');
+          const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
           const [brandName, setBrandName] = useState('The Archive');
           const [curatorName, setCuratorName] = useState('Heewon');
-          const [categories, setCategories] = useState([
+
+          const categories = [
             { id: 'cat1', name: '01. 인테리어/가구', color: '#DBCBBD' }, 
-            { id: 'cat2', name: '02. 쇼핑/위시리스트', color: '#E2B4B4' },
+            { id: 'cat2', name: '02. 위시리스트/쇼핑', color: '#E2B4B4' },
             { id: 'cat3', name: '03. 유용한 팁/정보', color: '#7E8A97' },
             { id: 'cat4', name: '04. 맛집/레시피', color: '#94A684' },
             { id: 'cat5', name: '05. 영수증/계약서', color: '#A0A0A0' },
             { id: 'cat6', name: '06. 업무/공부', color: '#4A4A4A' }
-          ]);
+          ];
 
-          // --- [데이터 제어] ---
-          const handleBackup = () => {
-            const data = JSON.stringify({ screenshots, brandName, curatorName, categories }, null, 2);
-            saveAs(new Blob([data], { type: 'application/json' }), "backup.json");
+          // --- [New] 비디오 썸네일 생성 함수 (맥 호환성 핵심) ---
+          const generateThumbnail = (file) => {
+            return new Promise((resolve) => {
+              const video = document.createElement('video');
+              video.preload = 'metadata';
+              video.muted = true;
+              video.playsInline = true;
+              video.src = URL.createObjectURL(file);
+              video.onloadeddata = () => {
+                video.currentTime = 0.5;
+              };
+              video.onseeked = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg'));
+              };
+              video.onerror = () => resolve(null);
+            });
           };
 
-          const handleImport = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              try {
-                const data = JSON.parse(ev.target.result);
-                if (data.screenshots) setScreenshots(data.screenshots);
-                if (data.brandName) setBrandName(data.brandName);
-                if (data.curatorName) setCuratorName(data.curatorName);
-                alert("Restored.");
-              } catch (err) { alert("Invalid file."); }
-            };
-            reader.readAsText(file);
-          };
-
-          const handleFileUpload = (e) => {
+          const handleFileUpload = async (e) => {
             const files = Array.from(e.target.files);
-            const processed = files.map(file => ({
-              id: Math.random().toString(36).substr(2, 9),
-              preview: URL.createObjectURL(file),
-              mediaType: file.type.startsWith('video/') ? 'video' : 'image',
-              note: '', date: new Date().toISOString()
+            const processed = await Promise.all(files.map(async file => {
+              const isVideo = file.type.startsWith('video/');
+              return {
+                id: Math.random().toString(36).substr(2, 9),
+                preview: URL.createObjectURL(file),
+                thumbnail: isVideo ? await generateThumbnail(file) : null,
+                mediaType: isVideo ? 'video' : 'image',
+                note: '', favorite: false, date: new Date().toISOString()
+              };
             }));
             setUploadedFiles(processed); setView('sort');
           };
 
-          const handleExport = async (type) => {
-            const items = (view === 'sort' ? uploadedFiles : screenshots).filter(f => selectedIds.includes(f.id));
-            if (items.length === 0) return;
+          const currentItems = useMemo(() => {
+            if (!selectedCategoryId) return [];
+            let items = screenshots.filter(s => s.category === selectedCategoryId);
+            if (showFavoritesOnly) items = items.filter(s => s.favorite);
+            items.sort((a, b) => sortBy === 'recent' ? new Date(b.date) - new Date(a.date) : new Date(a.date) - new Date(b.date));
+            return items;
+          }, [screenshots, selectedCategoryId, sortBy, showFavoritesOnly]);
 
-            if (type === 'pdf') {
-              const name = prompt("Filename:", "Archive_Export");
-              if (!name) return;
-              const { jsPDF } = window.jspdf;
-              const doc = new jsPDF();
-              items.forEach((s, i) => {
-                if (i > 0) doc.addPage();
-                if (s.mediaType === 'image') try { doc.addImage(s.preview, 'JPEG', 15, 15, 180, 100); } catch(e){}
-                else doc.text("[Video Content]", 15, 50);
-                doc.text(s.note || "", 15, 125);
-              });
-              doc.save(`${name}.pdf`);
-            } else {
-              const zip = new JSZip();
-              for(let i=0; i<items.length; i++) {
-                const res = await fetch(items[i].preview);
-                const blob = await res.blob();
-                zip.file(`media_${i+1}.${items[i].mediaType === 'video' ? 'mp4' : 'jpg'}`, blob);
-              }
-              const content = await zip.generateAsync({type: "blob"});
-              saveAs(content, "export.zip");
+          // --- [미디어 렌더러] 목록에선 썸네일, 줌에선 비디오 ---
+          const MediaRenderer = ({ item, isZoomed = false }) => {
+            if (item.mediaType === 'video') {
+              if (!isZoomed && item.thumbnail) return <img src={item.thumbnail} className="w-full h-full object-cover" />;
+              return <video src={item.preview} className="w-full h-full object-contain" autoPlay loop muted={!isZoomed} controls={isZoomed} playsInline />;
             }
+            return <img src={item.preview} className="w-full h-full object-cover" />;
           };
 
           return (
             <div className="min-h-screen">
-              {/* 상단바 (Select 시 노출) */}
-              {isSelectMode && selectedIds.length > 0 && (
-                <div className="top-floating-bar bg-black text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-10">
-                  <span className="text-[12px] font-black border-r border-gray-700 pr-10">{selectedIds.length} SELECTED</span>
-                  <button onClick={() => handleExport('pdf')} className="text-[11px] font-bold uppercase hover:text-blue-400">PDF</button>
-                  <button onClick={() => handleExport('zip')} className="text-[11px] font-bold uppercase hover:text-yellow-400">ZIP</button>
-                  <button onClick={() => {
-                    if(view === 'sort') setUploadedFiles(prev => prev.filter(f => !selectedIds.includes(f.id)));
-                    else setScreenshots(prev => prev.filter(s => !selectedIds.includes(s.id)));
-                    setSelectedIds([]);
-                  }} className="text-[11px] font-bold uppercase text-red-400">Trash</button>
-                </div>
-              )}
-
-              {/* 1. HOME */}
+              {/* --- 1. HOME --- */}
               {view === 'home' && (
                 <div className="max-w-4xl mx-auto px-6 py-10 text-left">
                   <div className="flex justify-between items-start mb-12">
-                    <div>
-                      <h1 className="text-5xl italic font-light tracking-tight mb-2">{brandName}</h1>
-                      <p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold">Curated by {curatorName}</p>
-                    </div>
+                    <div><h1 className="text-5xl italic font-light tracking-tight mb-2">{brandName}</h1><p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold">Curated by {curatorName}</p></div>
                     <div className="flex gap-2">
-                        <button onClick={handleBackup} className="pill-btn bg-blue-50 text-blue-600">Export JSON</button>
-                        <label className="pill-btn bg-gray-50 text-gray-400 cursor-pointer hover:bg-black hover:text-white transition-all">
-                            Import JSON <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-                        </label>
-                        <button onClick={() => setView('settings')} className="pill-btn bg-gray-50 text-gray-400 hover:bg-black hover:text-white">Settings</button>
+                        <button onClick={() => saveAs(new Blob([JSON.stringify({screenshots, brandName, curatorName})], {type: 'application/json'}), 'backup.json')} className="pill-btn pill-btn-blue">Backup</button>
+                        <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline hover:bg-black hover:text-white">Settings</button>
                     </div>
                   </div>
                   <label className="w-full bg-black text-white py-12 rounded-3xl flex items-center justify-center cursor-pointer hover:opacity-90 font-bold uppercase shadow-2xl mb-16">
@@ -150,8 +130,8 @@
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {categories.map((cat, idx) => (
                       <button key={cat.id} onClick={() => { setSelectedCategoryId(cat.id); setView('category'); }} 
-                              className="bg-white p-8 border border-gray-100 shadow-sm archive-card text-center transition-all hover:border-black">
-                        <div className="w-14 h-14 rounded-full mb-6 mx-auto flex items-center justify-center text-white text-lg font-bold italic" style={{ backgroundColor: cat.color }}>{idx + 1}</div>
+                              className="bg-white p-8 border border-gray-100 shadow-sm archive-card text-center">
+                        <div className="category-icon" style={{ backgroundColor: cat.color }}>{idx + 1}</div>
                         <div className="font-bold text-gray-900 text-base mb-1">{cat.name}</div>
                         <div className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">{screenshots.filter(s => s.category === cat.id).length} Records</div>
                       </button>
@@ -160,73 +140,81 @@
                 </div>
               )}
 
-              {/* 2. SORT VIEW */}
+              {/* --- 2. SORT VIEW (예쁜 디자인 유지) --- */}
               {view === 'sort' && (
-                <div className="max-w-4xl mx-auto px-6 py-24 text-left">
+                <div className="max-w-4xl mx-auto px-6 py-24">
                   <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b border-gray-100">
-                    <button onClick={() => {setView('home'); setUploadedFiles([]); setIsSelectMode(false);}} className="text-[11px] font-bold uppercase text-gray-400">← Exit</button>
-                    <div className="flex gap-4">
-                        <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'bg-black text-white' : 'bg-gray-100'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
-                        <button onClick={() => {
-                            const news = uploadedFiles.map(f => ({ ...f, category: f.selectedCategory || categories[0].id }));
-                            setScreenshots(prev => [...prev, ...news]);
-                            setUploadedFiles([]); setView('home');
-                        }} className="pill-btn bg-black text-white shadow-lg">Save All</button>
+                    <button onClick={() => {setView('home'); setUploadedFiles([]);}} className="text-[10px] font-bold uppercase text-gray-400">← Exit</button>
+                    <div className="flex gap-3">
+                        <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+                        {selectedIds.length > 0 && <button onClick={() => {
+                             const news = uploadedFiles.filter(f => selectedIds.includes(f.id)).map(f => ({ ...f, category: categories[0].id, date: new Date().toISOString() }));
+                             setScreenshots(prev => [...prev, ...news]);
+                             const rem = uploadedFiles.filter(f => !selectedIds.includes(f.id));
+                             setUploadedFiles(rem); setSelectedIds([]); if (rem.length === 0) setView('home');
+                        }} className="pill-btn pill-btn-black">Archive ({selectedIds.length})</button>}
                     </div>
                   </div>
                   {uploadedFiles.map(f => (
-                    <div key={f.id} onClick={() => isSelectMode && (selectedIds.includes(f.id) ? setSelectedIds(selectedIds.filter(i => i !== f.id)) : setSelectedIds([...selectedIds, f.id]))} 
-                         className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 transition-all ${selectedIds.includes(f.id) ? 'selected-card border-black' : 'shadow-sm'}`}>
-                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50 flex items-center justify-center">
-                        {f.mediaType === 'video' ? <video src={f.preview} className="w-full h-full object-cover" muted playsInline autoPlay loop /> : <img src={f.preview} className="w-full h-full object-cover" />}
+                    <div key={f.id} onClick={() => isSelectMode ? (selectedIds.includes(f.id) ? setSelectedIds(selectedIds.filter(i => i !== f.id)) : setSelectedIds([...selectedIds, f.id])) : setZoomedImageInSort(f)} 
+                         className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 cursor-pointer transition-all ${selectedIds.includes(f.id) ? 'selected-item' : 'border-gray-100 shadow-sm'}`}>
+                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50">
+                        <MediaRenderer item={f} />
                         {f.mediaType === 'video' && <div className="video-indicator">VIDEO</div>}
-                        {isSelectMode && selectedIds.includes(f.id) && <div className="check-badge">✓</div>}
+                        {selectedIds.includes(f.id) && <div className="check-badge">✓</div>}
                       </div>
-                      <div className="w-full md:w-1/2" onClick={e => e.stopPropagation()}>
-                        <div className="grid grid-cols-2 gap-3 mb-6">
-                            {categories.map(c => <button key={c.id} onClick={() => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, selectedCategory: c.id} : i))} 
-                                className={`px-3 py-4 rounded-xl text-[10px] font-bold uppercase transition-all ${f.selectedCategory === c.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-400'}`}>{c.name}</button>)}
-                        </div>
-                        <textarea placeholder="Write a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-3xl p-8 text-base outline-none min-h-[160px] italic" />
-                      </div>
+                      <div className="w-full md:w-1/2" onClick={e => e.stopPropagation()}><textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-[2rem] p-8 text-base outline-none min-h-[200px]" /></div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* 3. CATEGORY VIEW */}
+              {/* --- 3. CATEGORY VIEW --- */}
               {view === 'category' && (
                 <div className="max-w-6xl mx-auto px-6 py-24 text-left">
                   <div className="flex justify-between items-center mb-16">
-                    <div className="flex items-center gap-6 overflow-x-auto no-scrollbar pr-10">
-                        <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 whitespace-nowrap">← Index</button>
-                        <div className="h-4 w-px bg-gray-200"></div>
-                        {categories.map(c => <button key={c.id} onClick={() => setSelectedCategoryId(c.id)} 
-                            className={`text-[11px] font-bold uppercase whitespace-nowrap ${selectedCategoryId === c.id ? 'text-black border-b-2 border-black' : 'text-gray-300 hover:text-black'}`}>{c.name}</button>)}
-                    </div>
-                    <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'bg-black text-white' : 'bg-gray-100'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+                    <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400">← Index</button>
+                    <button onClick={() => setIsSelectMode(!isSelectMode)} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
                   </div>
-                  <h2 className="text-7xl italic font-light tracking-tighter mb-20">{categories.find(c => c.id === selectedCategoryId)?.name}</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-10">
-                    {screenshots.filter(s => s.category === selectedCategoryId).map(s => (
-                      <div key={s.id} onClick={() => isSelectMode ? (selectedIds.includes(s.id) ? setSelectedIds(selectedIds.filter(i => i !== s.id)) : setSelectedIds([...selectedIds, s.id])) : setZoomedImage(s)} 
-                           className={`archive-card bg-white p-5 border border-gray-100 ${selectedIds.includes(s.id) ? 'selected-card border-black' : ''}`}>
-                        <div className="aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden relative shadow-inner">
-                           {s.mediaType === 'video' ? <video src={s.preview} className="w-full h-full object-cover" muted playsInline autoPlay loop /> : <img src={s.preview} className="w-full h-full object-cover" />}
-                           {isSelectMode && selectedIds.includes(s.id) && <div className="check-badge">✓</div>}
+                  <h2 className="text-7xl italic font-light tracking-tighter mb-20 text-gray-900">{selectedCategory?.name}</h2>
+                  <div className="space-y-8">
+                    {currentItems.map(s => (
+                      <div key={s.id} onClick={() => isSelectMode ? (selectedIds.includes(s.id) ? setSelectedIds(selectedIds.filter(i => i !== s.id)) : setSelectedIds([...selectedIds, s.id])) : setZoomedImage(s)} className={`relative archive-card ${selectedIds.includes(s.id) ? 'selected-item' : ''}`}>
+                        <div className="overflow-hidden bg-gray-50 rounded-lg relative max-w-4xl mx-auto border border-gray-100">
+                          <MediaRenderer item={s} />
+                          {s.mediaType === 'video' && <div className="video-indicator">VIDEO</div>}
+                          {selectedIds.includes(s.id) && <div className="check-badge">✓</div>}
+                          {s.favorite && <div className="absolute top-3 right-3 text-2xl">⭐</div>}
                         </div>
-                        <p className="mt-5 italic text-gray-500 truncate">{s.note || 'Untitled'}</p>
+                        <p className="italic text-base text-gray-500 line-clamp-1 mt-4">{s.note || 'Untitled'}</p>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* 4. ZOOM VIEW */}
-              {zoomedImage && (
-                <div className="fixed inset-0 bg-black/98 z-[5000] flex items-center justify-center p-4" onClick={() => setZoomedImage(null)}>
-                  {zoomedImage.mediaType === 'video' ? <video src={zoomedImage.preview} className="max-w-full max-h-full" playsInline loop controls autoPlay /> : <img src={zoomedImage.preview} className="max-w-full max-h-full object-contain" />}
-                  <button onClick={() => setZoomedImage(null)} className="absolute top-6 right-8 text-white text-4xl">✕</button>
+              {/* --- 4. ENHANCED ZOOM (카테고리 바 포함) --- */}
+              {(zoomedImage || zoomedImageInSort) && (
+                <div className="fixed inset-0 bg-black/95 z-[5000] flex items-center justify-center p-4" onClick={() => {setZoomedImage(null); setZoomedImageInSort(null);}}>
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    <MediaRenderer item={zoomedImage || zoomedImageInSort} isZoomed={true} />
+                    <div className="absolute top-1/2 -translate-y-1/2 right-6 flex flex-col gap-3" onClick={e => e.stopPropagation()}>
+                      {categories.map((cat, idx) => (
+                        <button key={cat.id} onClick={() => {
+                          const item = zoomedImage || zoomedImageInSort;
+                          if (zoomedImage) { setScreenshots(prev => prev.map(s => s.id === item.id ? {...s, category: cat.id} : s)); setZoomedImage({...item, category: cat.id}); }
+                          else { setUploadedFiles(prev => prev.map(f => f.id === item.id ? {...f, category: cat.id} : f)); setZoomedImageInSort({...item, category: cat.id}); }
+                        }} className={`flex items-center justify-end gap-3 transition-all ${ (zoomedImage || zoomedImageInSort).category === cat.id ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}>
+                          <span className="bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg">{cat.name}</span>
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg" style={{backgroundColor: cat.color}}>{idx + 1}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="absolute top-4 right-6 flex gap-2">
+                        <button onClick={() => { toggleFavorite((zoomedImage || zoomedImageInSort).id); (zoomedImage ? setZoomedImage : setZoomedImageInSort)(prev => ({...prev, favorite: !prev.favorite})); }} className="pill-btn pill-btn-outline bg-white text-black">Favorite</button>
+                        <button onClick={() => {setZoomedImage(null); setZoomedImageInSort(null);}} className="bg-white/20 text-white w-10 h-10 rounded-full flex items-center justify-center text-2xl">✕</button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
