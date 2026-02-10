@@ -22,6 +22,8 @@
         .check-badge { position: absolute; top: 15px; left: 15px; width: 32px; height: 32px; background-color: #000; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 900; border: 2px solid #fff; z-index: 50; }
         .pill-btn { font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 7px 18px; border-radius: 9999px; letter-spacing: 0.1em; transition: all 0.2s; }
         .pill-btn-black { background-color: #000; color: #fff; border: 1px solid #000; }
+        .pill-btn-red { background-color: #ef4444; color: #fff; }
+        .pill-btn-blue { background-color: #eff6ff; color: #2563eb; }
         .pill-btn-outline { border: 1px solid #e5e7eb; color: #9ca3af; }
         .video-label { position: absolute; bottom: 12px; right: 12px; background: rgba(0,0,0,0.7); color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; z-index: 10; }
     </style>
@@ -29,7 +31,7 @@
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useMemo, useEffect, useRef } = React;
+        const { useState, useMemo, useEffect } = React;
 
         function ScreenshotApp() {
           const [view, setView] = useState('home');
@@ -37,11 +39,9 @@
           const [uploadedFiles, setUploadedFiles] = useState([]);
           const [selectedCategoryId, setSelectedCategoryId] = useState(null);
           const [zoomedImage, setZoomedImage] = useState(null);
-          const [zoomedImageInSort, setZoomedImageInSort] = useState(null);
           const [isSelectMode, setIsSelectMode] = useState(false);
           const [selectedIds, setSelectedIds] = useState([]);
           const [sortBy, setSortBy] = useState('recent');
-          const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
           const [brandName, setBrandName] = useState('The Archive');
           const [curatorName, setCuratorName] = useState('Heewon');
 
@@ -56,8 +56,8 @@
 
           const selectedCategory = useMemo(() => categories.find(c => c.id === selectedCategoryId), [selectedCategoryId]);
 
-          // --- [기술 복구] 비디오 썸네일 추출 (맥 호환성 정답) ---
-          const extractVideoThumb = (file) => {
+          // 비디오 썸네일 추출 기술
+          const extractThumb = (file) => {
             return new Promise((resolve) => {
               const video = document.createElement('video');
               video.preload = 'metadata'; video.muted = true; video.playsInline = true;
@@ -80,12 +80,37 @@
               return {
                 id: Math.random().toString(36).substr(2, 9),
                 preview: URL.createObjectURL(file),
-                thumbnail: isVideo ? await extractVideoThumb(file) : null,
+                thumbnail: isVideo ? await extractThumb(file) : null,
                 mediaType: isVideo ? 'video' : 'image',
-                note: '', favorite: false, date: new Date().toISOString()
+                note: '', date: new Date().toISOString()
               };
             }));
-            setUploadedFiles(processed); setView('sort');
+            setUploadedFiles(processed); setView('sort'); setSelectedIds([]); setIsSelectMode(false);
+          };
+
+          const handleExport = async (type) => {
+            const items = (view === 'sort' ? uploadedFiles : screenshots).filter(f => selectedIds.includes(f.id));
+            if (items.length === 0) return;
+            if (type === 'pdf') {
+              const { jsPDF } = window.jspdf;
+              const doc = new jsPDF();
+              items.forEach((s, i) => {
+                if (i > 0) doc.addPage();
+                if (s.mediaType === 'image') doc.addImage(s.preview, 'JPEG', 15, 15, 180, 100);
+                else doc.text("[Video Content]", 15, 50);
+                doc.text(s.note || "", 15, 125);
+              });
+              doc.save("archive.pdf");
+            } else {
+              const zip = new JSZip();
+              for(let i=0; i<items.length; i++) {
+                const res = await fetch(items[i].preview);
+                const blob = await res.blob();
+                zip.file(`file_${i+1}.${items[i].mediaType === 'video' ? 'mp4' : 'jpg'}`, blob);
+              }
+              const content = await zip.generateAsync({type: "blob"});
+              saveAs(content, "archive.zip");
+            }
           };
 
           const MediaRenderer = ({ item, isZoomed = false }) => {
@@ -96,24 +121,24 @@
             return <img src={item.preview} className="w-full h-full object-cover" />;
           };
 
-          const currentItems = useMemo(() => {
-            if (!selectedCategoryId) return [];
-            let items = screenshots.filter(s => s.category === selectedCategoryId);
-            if (showFavoritesOnly) items = items.filter(s => s.favorite);
-            items.sort((a, b) => sortBy === 'recent' ? new Date(b.date) - new Date(a.date) : new Date(a.date) - new Date(b.date));
-            return items;
-          }, [screenshots, selectedCategoryId, sortBy, showFavoritesOnly]);
-
           return (
             <div className="min-h-screen">
-              {/* --- 1. HOME (예쁜 디자인 복구) --- */}
+              {/* --- 1. HOME --- */}
               {view === 'home' && (
                 <div className="max-w-4xl mx-auto px-6 py-10 text-left">
                   <div className="flex justify-between items-start mb-12">
                     <div><h1 className="text-5xl italic font-light tracking-tight mb-2">{brandName}</h1><p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold">Curated by {curatorName}</p></div>
                     <div className="flex gap-2">
-                        <button onClick={() => saveAs(new Blob([JSON.stringify({screenshots, brandName, curatorName})], {type: 'application/json'}), 'backup.json')} className="pill-btn bg-blue-50 text-blue-600">Backup</button>
-                        <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline hover:bg-black hover:text-white">Settings</button>
+                        <button onClick={() => saveAs(new Blob([JSON.stringify({screenshots, brandName, curatorName})], {type: 'application/json'}), 'backup.json')} className="pill-btn pill-btn-blue">Backup</button>
+                        <label className="pill-btn pill-btn-outline cursor-pointer bg-white">Import <input type="file" accept=".json" onChange={(e) => {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                                const data = JSON.parse(ev.target.result);
+                                setScreenshots(data.screenshots || []); setBrandName(data.brandName || brandName);
+                            };
+                            reader.readAsText(e.target.files[0]);
+                        }} className="hidden" /></label>
+                        <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline hover:bg-black hover:text-white transition-all">Settings</button>
                     </div>
                   </div>
                   <label className="w-full bg-black text-white py-12 rounded-3xl flex items-center justify-center cursor-pointer hover:opacity-90 font-bold uppercase shadow-2xl mb-16">
@@ -122,7 +147,7 @@
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
                     {categories.map((cat, idx) => (
-                      <button key={cat.id} onClick={() => { setSelectedCategoryId(cat.id); setView('category'); }} className="bg-white p-8 border border-gray-100 shadow-sm archive-card">
+                      <button key={cat.id} onClick={() => { setSelectedCategoryId(cat.id); setView('category'); setSelectedIds([]); setIsSelectMode(false); }} className="bg-white p-8 border border-gray-100 shadow-sm archive-card">
                         <div className="category-icon" style={{ backgroundColor: cat.color }}>{idx + 1}</div>
                         <div className="font-bold text-gray-900 text-base mb-1">{cat.name}</div>
                         <div className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">{screenshots.filter(s => s.category === cat.id).length} Records</div>
@@ -132,23 +157,38 @@
                 </div>
               )}
 
-              {/* --- 2. SORT VIEW (알록달록 버튼 복구) --- */}
+              {/* --- 2. SORT VIEW --- */}
               {view === 'sort' && (
                 <div className="max-w-4xl mx-auto px-6 py-24">
                   <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b border-gray-100">
                     <button onClick={() => {setView('home'); setUploadedFiles([]);}} className="text-[10px] font-bold uppercase text-gray-400">← Exit</button>
-                    <button onClick={() => {
-                        const news = uploadedFiles.map(f => ({ ...f, category: categories[0].id }));
-                        setScreenshots(prev => [...prev, ...news]); setUploadedFiles([]); setView('home');
-                    }} className="pill-btn pill-btn-black shadow-lg">Archive All ({uploadedFiles.length})</button>
+                    <div className="flex gap-3">
+                        <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+                        {isSelectMode ? (
+                            <>
+                                <button onClick={() => setSelectedIds(uploadedFiles.map(f => f.id))} className="pill-btn pill-btn-outline">Select All</button>
+                                <button onClick={() => handleExport('pdf')} className="pill-btn pill-btn-black">PDF</button>
+                                <button onClick={() => {
+                                    const news = uploadedFiles.filter(f => selectedIds.includes(f.id)).map(f => ({ ...f, category: categories[0].id }));
+                                    setScreenshots(prev => [...prev, ...news]); setUploadedFiles(prev => prev.filter(f => !selectedIds.includes(f.id))); setSelectedIds([]);
+                                }} className="pill-btn pill-btn-black">Archive Selected</button>
+                            </>
+                        ) : (
+                            <button onClick={() => {
+                                const news = uploadedFiles.map(f => ({ ...f, category: categories[0].id }));
+                                setScreenshots(prev => [...prev, ...news]); setUploadedFiles([]); setView('home');
+                            }} className="pill-btn pill-btn-black shadow-lg">Save All</button>
+                        )}
+                    </div>
                   </div>
                   {uploadedFiles.map(f => (
-                    <div key={f.id} className="bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 shadow-sm">
+                    <div key={f.id} onClick={() => isSelectMode && toggleId(f.id)} className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 transition-all ${selectedIds.includes(f.id) ? 'selected-item' : 'shadow-sm'}`}>
                       <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50">
                         <MediaRenderer item={f} />
                         {f.mediaType === 'video' && <div className="video-label">VIDEO</div>}
+                        {selectedIds.includes(f.id) && <div className="check-badge">✓</div>}
                       </div>
-                      <div className="w-full md:w-1/2"><textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-[2rem] p-8 text-base outline-none min-h-[200px]" /></div>
+                      <div className="w-full md:w-1/2" onClick={e => e.stopPropagation()}><textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-[2rem] p-8 text-base outline-none min-h-[200px]" /></div>
                     </div>
                   ))}
                 </div>
@@ -158,29 +198,27 @@
               {view === 'category' && selectedCategory && (
                 <div className="max-w-6xl mx-auto px-6 py-24 text-left">
                   <div className="flex justify-between items-center mb-16">
-                    <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 tracking-[0.2em]">← Index</button>
-                    <h2 className="text-7xl italic font-light tracking-tighter text-gray-900">{selectedCategory.name}</h2>
+                    <div className="flex gap-4">
+                        <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 tracking-[0.2em]">← Index</button>
+                        <button onClick={() => handleExport('pdf')} className="pill-btn pill-btn-black">PDF</button>
+                        <button onClick={() => handleExport('zip')} className="pill-btn pill-btn-black">ZIP</button>
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-10">
-                    {currentItems.map(s => (
-                      <div key={s.id} onClick={() => setZoomedImage(s)} className="archive-card bg-white p-5 border border-gray-100">
-                        <div className="aspect-[4/3] bg-gray-50 rounded-xl overflow-hidden relative">
+                  <h2 className="text-7xl italic font-light tracking-tighter text-gray-900 mb-20">{selectedCategory.name}</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    {screenshots.filter(s => s.category === selectedCategoryId).map(s => (
+                      <div key={s.id} onClick={() => isSelectMode ? setSelectedIds(prev => prev.includes(s.id) ? prev.filter(i => i !== s.id) : [...prev, s.id]) : setZoomedImage(s)} className={`relative archive-card bg-white p-4 border border-gray-100 shadow-sm ${selectedIds.includes(s.id) ? 'selected-item' : ''}`}>
+                        <div className="aspect-video bg-gray-50 rounded-lg overflow-hidden relative">
                            <MediaRenderer item={s} />
                            {s.mediaType === 'video' && <div className="video-label">VIDEO</div>}
+                           {selectedIds.includes(s.id) && <div className="check-badge">✓</div>}
                         </div>
-                        <p className="mt-5 italic text-gray-500 truncate">{s.note || 'Untitled'}</p>
+                        <p className="mt-4 italic text-gray-500 truncate">{s.note || 'Untitled'}</p>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* --- 4. ZOOM VIEW --- */}
-              {zoomedImage && (
-                <div className="fixed inset-0 bg-black/95 z-[5000] flex items-center justify-center p-4" onClick={() => setZoomedImage(null)}>
-                  <div className="relative w-full h-full flex items-center justify-center">
-                    <MediaRenderer item={zoomedImage} isZoomed={true} />
-                    <button onClick={() => setZoomedImage(null)} className="absolute top-6 right-8 text-white text-4xl">✕</button>
                   </div>
                 </div>
               )}
