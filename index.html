@@ -16,32 +16,34 @@
         body { margin: 0; padding: 0; background-color: #FDFCFB; font-family: 'Playfair Display', 'Noto Serif KR', serif; color: #1A1A1A; }
         button, input, textarea { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .archive-card { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; border-radius: 1.5rem; position: relative; }
-        .selected-item { border-color: #000 !important; transform: scale(0.96); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
         
-        /* 상단 액션 바 디자인 고정 */
+        .archive-card { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; border-radius: 1.5rem; position: relative; border: 1px solid #f3f4f6; }
+        .selected-item { border-color: #000 !important; transform: scale(0.96); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.15) !important; }
+        
+        /* 상단 액션 바 디자인 - 시인성 극대화 */
         .top-action-bar { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        @keyframes slideDown { from { transform: translate(-50%, -100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+        @keyframes slideDown { from { transform: translate(-50%, -120%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
 
-        /* 체크 동그라미 시인성 강화 */
+        /* 체크 동그라미 시인성 대폭 강화 (블랙 배경 + 화이트 테두리) */
         .check-badge { 
-            position: absolute; top: 15px; left: 15px; width: 34px; height: 34px; 
+            position: absolute; top: 16px; left: 16px; width: 36px; height: 36px; 
             background-color: #000; color: #fff; border-radius: 50%; 
             display: flex; align-items: center; justify-content: center; 
-            font-size: 16px; font-weight: 900; border: 2px solid #fff; z-index: 50;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            font-size: 18px; font-weight: 900; border: 3px solid #fff; z-index: 50;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
         }
-        .pill-btn { font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 8px 20px; border-radius: 9999px; letter-spacing: 0.1em; transition: all 0.2s; }
-        .pill-btn-black { background-color: #000; color: #fff; }
+        
+        .pill-btn { font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 10px 22px; border-radius: 9999px; letter-spacing: 0.1em; transition: all 0.2s; }
+        .pill-btn-black { background-color: #000; color: #fff; border: 1px solid #000; }
         .pill-btn-red { background-color: #ef4444; color: #fff; }
         .pill-btn-outline { border: 1px solid #e5e7eb; color: #9ca3af; }
-        .video-indicator { position: absolute; bottom: 12px; right: 12px; background: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; z-index: 10; }
+        .video-indicator { position: absolute; bottom: 14px; right: 14px; background: rgba(0,0,0,0.75); color: white; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: bold; z-index: 10; border: 1px solid rgba(255,255,255,0.2); }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useMemo, useEffect } = React;
+        const { useState, useMemo, useEffect, useRef } = React;
 
         function ScreenshotApp() {
           const [view, setView] = useState('home');
@@ -66,23 +68,33 @@
             { id: 'cat6', name: '06. 업무/공부', color: '#4A4A4A' }
           ]);
 
-          // --- [Media Renderer] 맥 호환성 강화 ---
+          // --- [Media Renderer] 맥(Safari) 미리보기 호환성 강화 ---
           const MediaElement = ({ src, type, className, isZoomed = false }) => {
+            const videoRef = useRef(null);
+
+            useEffect(() => {
+              if (type === 'video' && videoRef.current) {
+                // 비디오 강제 재생 로직 (맥 호환성)
+                videoRef.current.defaultMuted = true;
+                videoRef.current.muted = !isZoomed;
+                videoRef.current.play().catch(e => console.log("Auto-play blocked, wait for user interaction"));
+              }
+            }, [src, type, isZoomed]);
+
             if (type === 'video') {
               return (
                 <video 
+                  ref={videoRef}
                   src={src} 
                   className={className} 
-                  muted={!isZoomed} 
-                  autoPlay 
-                  loop 
                   playsInline 
+                  loop 
                   controls={isZoomed}
-                  style={{ objectFit: 'cover' }}
+                  style={{ objectFit: isZoomed ? 'contain' : 'cover', width: '100%', height: '100%' }}
                 />
               );
             }
-            return <img src={src} className={className} style={{ objectFit: 'cover' }} />;
+            return <img src={src} className={className} style={{ objectFit: isZoomed ? 'contain' : 'cover', width: '100%', height: '100%' }} />;
           };
 
           const handleFileUpload = (e) => {
@@ -98,11 +110,11 @@
               });
               reader.readAsDataURL(file);
             }));
-            Promise.all(promises).then(res => { setUploadedFiles(res); setView('sort'); });
+            Promise.all(promises).then(res => { setUploadedFiles(res); setView('sort'); setSelectedIds([]); setIsSelectMode(false); });
           };
 
           const handleExportPDF = (targetItems) => {
-            const name = prompt("Enter PDF filename:", "Archive_Export");
+            const name = prompt("PDF 파일 이름을 입력하세요:", `${brandName}_Selection`);
             if (!name) return;
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
@@ -120,7 +132,25 @@
 
           return (
             <div className="min-h-screen">
-              {/* --- 1. HOME --- */}
+              {/* --- 상단 액션 바 (선택 시에만 노출) --- */}
+              {isSelectMode && selectedIds.length > 0 && (
+                <div className="top-action-bar bg-black text-white px-10 py-5 rounded-full shadow-[0_15px_30px_rgba(0,0,0,0.3)] flex items-center gap-10">
+                  <span className="text-[12px] font-black border-r border-gray-700 pr-10 tracking-widest">{selectedIds.length} SELECTED</span>
+                  <button onClick={() => handleExportPDF((view === 'sort' ? uploadedFiles : screenshots).filter(f => selectedIds.includes(f.id)))} className="text-[11px] font-bold uppercase hover:text-blue-400 transition-colors">Export PDF</button>
+                  {view === 'sort' ? (
+                    <button onClick={() => setIsModalOpen(true)} className="text-[11px] font-bold uppercase hover:text-green-400">Save Selection</button>
+                  ) : (
+                    <button onClick={() => {
+                      if(confirm("정말 삭제하시겠습니까?")) {
+                        setScreenshots(prev => prev.filter(s => !selectedIds.includes(s.id)));
+                        setSelectedIds([]);
+                      }
+                    }} className="text-[11px] font-bold uppercase text-red-400 hover:text-red-500">Delete</button>
+                  )}
+                </div>
+              )}
+
+              {/* --- 1. HOME VIEW --- */}
               {view === 'home' && (
                 <div className="max-w-4xl mx-auto px-6 py-10 text-left">
                   <div className="flex justify-between items-start mb-12">
@@ -129,18 +159,18 @@
                       <p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold">Curated by {curatorName}</p>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline hover:bg-black hover:text-white">Settings</button>
+                        <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline hover:bg-black hover:text-white transition-all">Settings</button>
                     </div>
                   </div>
                   <label className="w-full bg-black text-white py-12 rounded-3xl flex items-center justify-center cursor-pointer hover:opacity-90 font-bold text-xs tracking-[0.3em] uppercase shadow-2xl mb-16">
                     Add Media (Image/Video)
                     <input type="file" multiple accept="image/*,video/*" onChange={handleFileUpload} className="hidden" />
                   </label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
                     {categories.map((cat, idx) => (
                       <button key={cat.id} onClick={() => { setSelectedCategoryId(cat.id); setView('category'); }} 
-                              className="bg-white p-8 border border-gray-100 shadow-sm archive-card text-center">
-                        <div className="w-12 h-12 rounded-full mb-6 mx-auto flex items-center justify-center text-white text-lg font-bold italic" style={{ backgroundColor: cat.color }}>{idx + 1}</div>
+                              className="bg-white p-8 border border-gray-100 shadow-sm archive-card">
+                        <div className="w-14 h-14 rounded-full mb-6 mx-auto flex items-center justify-center text-white text-lg font-bold italic" style={{ backgroundColor: cat.color }}>{idx + 1}</div>
                         <div className="font-bold text-gray-900 text-base mb-1">{cat.name}</div>
                         <div className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">
                             {screenshots.filter(s => s.category === cat.id).length} Records
@@ -151,107 +181,92 @@
                 </div>
               )}
 
-              {/* --- 2. SORT VIEW (상단 메뉴바) --- */}
+              {/* --- 2. SORT VIEW (업로드 직후) --- */}
               {view === 'sort' && (
-                <div className="max-w-4xl mx-auto px-6 py-24 text-left">
-                  {isSelectMode && selectedIds.length > 0 && (
-                    <div className="top-action-bar bg-black text-white px-8 py-4 rounded-full shadow-2xl flex items-center gap-8">
-                      <span className="text-[11px] font-bold border-r border-gray-700 pr-8">{selectedIds.length} SELECTED</span>
-                      <button onClick={() => handleExportPDF(uploadedFiles.filter(f => selectedIds.includes(f.id)))} className="text-[10px] font-bold uppercase hover:text-blue-400">Export PDF</button>
-                      <button onClick={() => setIsModalOpen(true)} className="text-[10px] font-bold uppercase hover:text-green-400">Archive Items</button>
-                      <button onClick={() => { setUploadedFiles(prev => prev.filter(f => !selectedIds.includes(f.id))); setSelectedIds([]); }} className="text-[10px] font-bold uppercase text-red-400">Trash</button>
-                    </div>
-                  )}
-
+                <div className="max-w-4xl mx-auto px-6 py-24">
                   <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b border-gray-100">
-                    <button onClick={() => {setView('home'); setUploadedFiles([]);}} className="text-[10px] font-bold uppercase text-gray-400">← Exit</button>
-                    <div className="flex gap-3">
+                    <button onClick={() => {setView('home'); setUploadedFiles([]); setIsSelectMode(false);}} className="text-[11px] font-bold uppercase text-gray-400">← Exit</button>
+                    <div className="flex gap-4">
                         <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
-                        <button onClick={() => {
-                            const news = uploadedFiles.map(f => ({ ...f, category: f.selectedCategory || categories[0].id }));
-                            setScreenshots(prev => [...prev, ...news]);
-                            setUploadedFiles([]); setView('home');
-                        }} className="pill-btn pill-btn-black">Archive All</button>
+                        {!isSelectMode && (
+                          <button onClick={() => {
+                              const news = uploadedFiles.map(f => ({ ...f, category: f.selectedCategory || categories[0].id }));
+                              setScreenshots(prev => [...prev, ...news]);
+                              setUploadedFiles([]); setView('home');
+                          }} className="pill-btn pill-btn-black">Archive All</button>
+                        )}
                     </div>
                   </div>
-
                   {uploadedFiles.map(f => (
-                    <div key={f.id} onClick={() => isSelectMode ? (selectedIds.includes(f.id) ? setSelectedIds(selectedIds.filter(i => i !== f.id)) : setSelectedIds([...selectedIds, f.id])) : setZoomedImageInSort(f)} 
-                         className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 cursor-pointer transition-all ${selectedIds.includes(f.id) ? 'selected-item border-black' : 'border-gray-100 shadow-sm'}`}>
-                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50">
+                    <div key={f.id} onClick={() => isSelectMode ? toggleId(f.id) : setZoomedImageInSort(f)} 
+                         className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 transition-all ${selectedIds.includes(f.id) ? 'selected-item' : 'shadow-sm hover:shadow-lg'}`}>
+                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50 flex items-center justify-center">
                         <MediaElement src={f.preview} type={f.mediaType} className="w-full h-full" />
                         {f.mediaType === 'video' && <div className="video-indicator">VIDEO</div>}
                         {selectedIds.includes(f.id) && <div className="check-badge">✓</div>}
                       </div>
                       <div className="w-full md:w-1/2" onClick={e => e.stopPropagation()}>
-                        <div className="grid grid-cols-2 gap-2 mb-6">
+                        <div className="grid grid-cols-2 gap-3 mb-6">
                             {categories.map(c => <button key={c.id} onClick={() => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, selectedCategory: c.id} : i))} 
-                                className={`px-3 py-3 rounded-xl text-[9px] font-bold uppercase ${f.selectedCategory === c.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-400'}`}>{c.name}</button>)}
+                                className={`px-3 py-4 rounded-xl text-[10px] font-bold uppercase transition-all ${f.selectedCategory === c.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-400'}`}>{c.name}</button>)}
                         </div>
-                        <textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-[2rem] p-8 text-base outline-none min-h-[160px]" />
+                        <textarea placeholder="Write a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-[1.5rem] p-8 text-base outline-none min-h-[160px] italic" />
                       </div>
                     </div>
                   ))}
-
                   {isModalOpen && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[2000]" onClick={() => setIsModalOpen(false)}>
-                        <div className="bg-white p-8 rounded-[2.5rem] w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="bg-white p-10 rounded-[2.5rem] w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
+                            <p className="text-[11px] font-black uppercase text-gray-300 mb-6 text-center tracking-widest">Select Category</p>
                             {categories.map(c => <button key={c.id} onClick={() => {
                                 const news = uploadedFiles.filter(f => selectedIds.includes(f.id)).map(f => ({ ...f, category: c.id, date: new Date().toISOString() }));
                                 setScreenshots(prev => [...prev, ...news]);
                                 const rem = uploadedFiles.filter(f => !selectedIds.includes(f.id));
                                 setUploadedFiles(rem); setSelectedIds([]); setIsModalOpen(false); if (rem.length === 0) setView('home');
-                            }} className="w-full py-4 mb-2 bg-gray-50 rounded-2xl text-[10px] font-bold uppercase hover:bg-black hover:text-white">{c.name}</button>)}
+                            }} className="w-full py-4 mb-2 bg-gray-50 rounded-2xl text-[11px] font-bold uppercase hover:bg-black hover:text-white transition-all">{c.name}</button>)}
                         </div>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* --- 3. CATEGORY VIEW (상단 메뉴바) --- */}
+              {/* --- 3. CATEGORY VIEW --- */}
               {view === 'category' && (
                 <div className="max-w-6xl mx-auto px-6 py-24 text-left">
-                  {isSelectMode && selectedIds.length > 0 && (
-                    <div className="top-action-bar bg-black text-white px-8 py-4 rounded-full shadow-2xl flex items-center gap-8">
-                      <span className="text-[11px] font-bold border-r border-gray-700 pr-8">{selectedIds.length} SELECTED</span>
-                      <button onClick={() => handleExportPDF(screenshots.filter(s => selectedIds.includes(s.id)))} className="text-[10px] font-bold uppercase hover:text-blue-400">Export PDF</button>
-                      <button onClick={() => { if(confirm("Delete?")) { setScreenshots(prev => prev.filter(s => !selectedIds.includes(s.id))); setSelectedIds([]); } }} className="text-[10px] font-bold uppercase text-red-400">Delete</button>
-                    </div>
-                  )}
                   <div className="flex justify-between items-center mb-16">
-                    <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 tracking-[0.2em]">← Index</button>
+                    <button onClick={() => {setView('home'); setIsSelectMode(false);}} className="text-[11px] font-bold uppercase text-gray-400 tracking-[0.2em]">← Index Overview</button>
                     <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select Items'}</button>
                   </div>
-                  <h2 className="text-7xl italic font-light tracking-tighter mb-20">{selectedCategory?.name}</h2>
+                  <h2 className="text-7xl italic font-light tracking-tighter mb-20">{categories.find(c => c.id === selectedCategoryId)?.name}</h2>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-10">
                     {screenshots.filter(s => s.category === selectedCategoryId).map(s => (
-                      <div key={s.id} onClick={() => isSelectMode ? (selectedIds.includes(s.id) ? setSelectedIds(selectedIds.filter(i => i !== s.id)) : setSelectedIds([...selectedIds, s.id])) : setZoomedImage(s)} 
-                           className={`archive-card bg-white p-4 border border-gray-100 ${selectedIds.includes(s.id) ? 'selected-item border-black' : ''}`}>
-                        <div className="aspect-[4/3] bg-gray-50 rounded-lg overflow-hidden relative">
+                      <div key={s.id} onClick={() => isSelectMode ? toggleId(s.id) : setZoomedImage(s)} 
+                           className={`archive-card bg-white p-5 border border-gray-100 ${selectedIds.includes(s.id) ? 'selected-item' : ''}`}>
+                        <div className="aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden relative border border-gray-50 shadow-inner">
                            <MediaElement src={s.preview} type={s.mediaType} className="w-full h-full" />
                            {s.mediaType === 'video' && <div className="video-indicator">VIDEO</div>}
                            {selectedIds.includes(s.id) && <div className="check-badge">✓</div>}
                         </div>
-                        <p className="mt-4 italic text-gray-500 truncate">{s.note || 'Untitled'}</p>
+                        <p className="mt-5 italic text-gray-500 truncate text-base">{s.note || 'Untitled Inspiration'}</p>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* --- 4. ZOOM MODAL (비디오 소리 재생) --- */}
+              {/* --- 4. ZOOM VIEW --- */}
               {(zoomedImage || zoomedImageInSort) && (
-                <div className="fixed inset-0 bg-black/95 z-[5000] flex items-center justify-center p-4" onClick={() => {setZoomedImage(null); setZoomedImageInSort(null);}}>
+                <div className="fixed inset-0 bg-black/98 z-[5000] flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => {setZoomedImage(null); setZoomedImageInSort(null);}}>
                   <div className="relative w-full h-full flex items-center justify-center">
                     <MediaElement 
                         src={zoomedImage?.preview || zoomedImageInSort?.preview} 
                         type={zoomedImage?.mediaType || zoomedImageInSort?.mediaType} 
-                        className="max-w-full max-h-full" 
+                        className="max-w-full max-h-full shadow-2xl" 
                         isZoomed={true}
                     />
-                    <button onClick={() => {setZoomedImage(null); setZoomedImageInSort(null);}} className="absolute top-4 right-6 text-white text-3xl">✕</button>
+                    <button onClick={() => {setZoomedImage(null); setZoomedImageInSort(null);}} className="absolute top-4 right-6 text-white text-4xl hover:scale-110 transition-transform">✕</button>
                     {(zoomedImage?.note || zoomedImageInSort?.note) && (
-                      <div className="absolute bottom-10 bg-black/60 text-white p-6 rounded-2xl text-center max-w-2xl italic">
+                      <div className="absolute bottom-10 bg-black/60 backdrop-blur-md text-white p-8 rounded-3xl text-center max-w-2xl italic text-xl border border-white/10">
                         {zoomedImage?.note || zoomedImageInSort?.note}
                       </div>
                     )}
