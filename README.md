@@ -13,7 +13,7 @@
 
 An elegant screenshot curation tool combining sophisticated design with powerful workflow features. No installation required - works directly in your browser!
 
-**Live Demo:** [https://your-username.github.io/the-archive/](https://your-username.github.io/the-archive/)
+**Live Demo:** [https://your-username.github.io](https://fruitroom-stack.github.io/)/the-archive/](https://your-username.github.io/the-archive/)
 
 ---
 
