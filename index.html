@@ -44,6 +44,7 @@
         .pill-btn { font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 7px 18px; border-radius: 9999px; letter-spacing: 0.1em; transition: all 0.2s; }
         .pill-btn-black { background-color: #000; color: #fff; border: 1px solid #000; }
         .pill-btn-red { background-color: #ef4444; color: #fff; }
+        .pill-btn-blue { background-color: #eff6ff; color: #2563eb; }
         .pill-btn-outline { border: 1px solid #e5e7eb; color: #9ca3af; }
 
         /* --- New Control Panel Grid Styling --- */
@@ -308,7 +309,7 @@
                   </div>
                   {uploadedFiles.map(f => (
                     <div key={f.id} onClick={() => isSelectMode ? toggleId(f.id) : setZoomedImageInSort(f)} className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 cursor-pointer transition-all ${selectedIds.includes(f.id) ? 'selected-item' : 'border-gray-100 shadow-sm hover:shadow-lg'}`}>
-                      <div className="w-full md:w-1/2 relative aspect-video overflow-hidden rounded-[1rem]">
+                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem]">
                         <img src={f.preview} className={`w-full h-full object-cover transition-opacity ${selectedIds.includes(f.id) ? 'opacity-50' : 'opacity-100'}`} />
                         {selectedIds.includes(f.id) && <div className="check-badge">✓</div>}
                       </div>
@@ -356,7 +357,7 @@
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-12 text-left">
                     {currentItems.map(s => (
                       <div key={s.id} onClick={() => isSelectMode ? toggleId(s.id) : setZoomedImage(s)} className={`relative archive-card ${selectedIds.includes(s.id) ? 'selected-item' : ''}`}>
-                        <div className="aspect-video overflow-hidden bg-white mb-6 border border-gray-100 rounded-lg shadow-sm relative">
+                        <div className="aspect-[3/4] overflow-hidden bg-white mb-6 border border-gray-100 rounded-lg shadow-sm relative">
                           <img src={s.preview} className={`w-full h-full object-cover transition-opacity ${isSelectMode && !selectedIds.includes(s.id) ? 'opacity-40' : 'opacity-100'}`} />
                           {selectedIds.includes(s.id) && <div className="check-badge">✓</div>}
                           {s.favorite && !isSelectMode && (<div className="absolute top-3 right-3 text-2xl">⭐</div>)}
