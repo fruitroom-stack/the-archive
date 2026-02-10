@@ -23,13 +23,13 @@
         .pill-btn { font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 7px 18px; border-radius: 9999px; letter-spacing: 0.1em; transition: all 0.2s; }
         .pill-btn-black { background-color: #000; color: #fff; border: 1px solid #000; }
         .pill-btn-outline { border: 1px solid #e5e7eb; color: #9ca3af; }
-        .video-badge { position: absolute; bottom: 12px; right: 12px; background: rgba(0,0,0,0.7); color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; z-index: 10; }
+        .video-label { position: absolute; bottom: 12px; right: 12px; background: rgba(0,0,0,0.7); color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; z-index: 10; }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useMemo, useEffect } = React;
+        const { useState, useMemo, useEffect, useRef } = React;
 
         function ScreenshotApp() {
           const [view, setView] = useState('home');
@@ -37,10 +37,11 @@
           const [uploadedFiles, setUploadedFiles] = useState([]);
           const [selectedCategoryId, setSelectedCategoryId] = useState(null);
           const [zoomedImage, setZoomedImage] = useState(null);
+          const [zoomedImageInSort, setZoomedImageInSort] = useState(null);
           const [isSelectMode, setIsSelectMode] = useState(false);
           const [selectedIds, setSelectedIds] = useState([]);
-          const [isModalOpen, setIsModalOpen] = useState(false);
           const [sortBy, setSortBy] = useState('recent');
+          const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
           const [brandName, setBrandName] = useState('The Archive');
           const [curatorName, setCuratorName] = useState('Heewon');
 
@@ -53,8 +54,10 @@
             { id: 'cat6', name: 'Misc', color: '#9E9E9E' }
           ];
 
-          // --- [기술 수정] 비디오 썸네일 자동 추출 (미리보기 해결) ---
-          const extractThumbnail = (file) => {
+          const selectedCategory = useMemo(() => categories.find(c => c.id === selectedCategoryId), [selectedCategoryId]);
+
+          // --- [기술 복구] 비디오 썸네일 추출 (맥 호환성 정답) ---
+          const extractVideoThumb = (file) => {
             return new Promise((resolve) => {
               const video = document.createElement('video');
               video.preload = 'metadata'; video.muted = true; video.playsInline = true;
@@ -77,24 +80,12 @@
               return {
                 id: Math.random().toString(36).substr(2, 9),
                 preview: URL.createObjectURL(file),
-                thumbnail: isVideo ? await extractThumbnail(file) : null,
+                thumbnail: isVideo ? await extractVideoThumb(file) : null,
                 mediaType: isVideo ? 'video' : 'image',
-                note: '', date: new Date().toISOString()
+                note: '', favorite: false, date: new Date().toISOString()
               };
             }));
             setUploadedFiles(processed); setView('sort');
-          };
-
-          const handleImport = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              const data = JSON.parse(ev.target.result);
-              setScreenshots(data.screenshots || []); setBrandName(data.brandName || brandName);
-              setCuratorName(data.curatorName || curatorName); alert("Restore Complete.");
-            };
-            reader.readAsText(file);
           };
 
           const MediaRenderer = ({ item, isZoomed = false }) => {
@@ -105,16 +96,23 @@
             return <img src={item.preview} className="w-full h-full object-cover" />;
           };
 
+          const currentItems = useMemo(() => {
+            if (!selectedCategoryId) return [];
+            let items = screenshots.filter(s => s.category === selectedCategoryId);
+            if (showFavoritesOnly) items = items.filter(s => s.favorite);
+            items.sort((a, b) => sortBy === 'recent' ? new Date(b.date) - new Date(a.date) : new Date(a.date) - new Date(b.date));
+            return items;
+          }, [screenshots, selectedCategoryId, sortBy, showFavoritesOnly]);
+
           return (
             <div className="min-h-screen">
-              {/* --- 1. HOME --- */}
+              {/* --- 1. HOME (예쁜 디자인 복구) --- */}
               {view === 'home' && (
                 <div className="max-w-4xl mx-auto px-6 py-10 text-left">
                   <div className="flex justify-between items-start mb-12">
                     <div><h1 className="text-5xl italic font-light tracking-tight mb-2">{brandName}</h1><p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold">Curated by {curatorName}</p></div>
                     <div className="flex gap-2">
                         <button onClick={() => saveAs(new Blob([JSON.stringify({screenshots, brandName, curatorName})], {type: 'application/json'}), 'backup.json')} className="pill-btn bg-blue-50 text-blue-600">Backup</button>
-                        <label className="pill-btn pill-btn-outline cursor-pointer bg-white">Import <input type="file" accept=".json" onChange={handleImport} className="hidden" /></label>
                         <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline hover:bg-black hover:text-white">Settings</button>
                     </div>
                   </div>
@@ -134,48 +132,41 @@
                 </div>
               )}
 
-              {/* --- 2. SORT VIEW (분류 화면) --- */}
+              {/* --- 2. SORT VIEW (알록달록 버튼 복구) --- */}
               {view === 'sort' && (
                 <div className="max-w-4xl mx-auto px-6 py-24">
                   <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b border-gray-100">
                     <button onClick={() => {setView('home'); setUploadedFiles([]);}} className="text-[10px] font-bold uppercase text-gray-400">← Exit</button>
-                    <button onClick={() => setIsModalOpen(true)} className="pill-btn pill-btn-black">Archive All ({uploadedFiles.length})</button>
+                    <button onClick={() => {
+                        const news = uploadedFiles.map(f => ({ ...f, category: categories[0].id }));
+                        setScreenshots(prev => [...prev, ...news]); setUploadedFiles([]); setView('home');
+                    }} className="pill-btn pill-btn-black shadow-lg">Archive All ({uploadedFiles.length})</button>
                   </div>
                   {uploadedFiles.map(f => (
                     <div key={f.id} className="bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 shadow-sm">
                       <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50">
                         <MediaRenderer item={f} />
-                        {f.mediaType === 'video' && <div className="video-badge">VIDEO</div>}
+                        {f.mediaType === 'video' && <div className="video-label">VIDEO</div>}
                       </div>
                       <div className="w-full md:w-1/2"><textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-[2rem] p-8 text-base outline-none min-h-[200px]" /></div>
                     </div>
                   ))}
-                  {isModalOpen && (
-                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[2000]" onClick={() => setIsModalOpen(false)}>
-                        <div className="bg-white p-8 rounded-[2.5rem] w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
-                            {categories.map(c => <button key={c.id} onClick={() => {
-                                const news = uploadedFiles.map(f => ({ ...f, category: c.id }));
-                                setScreenshots(prev => [...prev, ...news]); setUploadedFiles([]); setView('home'); setIsModalOpen(false);
-                            }} className="w-full py-4 mb-2 bg-gray-50 rounded-2xl text-[10px] font-bold uppercase hover:bg-black hover:text-white transition-all">{c.name}</button>)}
-                        </div>
-                    </div>
-                  )}
                 </div>
               )}
 
               {/* --- 3. CATEGORY VIEW --- */}
-              {view === 'category' && (
+              {view === 'category' && selectedCategory && (
                 <div className="max-w-6xl mx-auto px-6 py-24 text-left">
                   <div className="flex justify-between items-center mb-16">
                     <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 tracking-[0.2em]">← Index</button>
-                    <h2 className="text-7xl italic font-light tracking-tighter text-gray-900">{categories.find(c => c.id === selectedCategoryId)?.name}</h2>
+                    <h2 className="text-7xl italic font-light tracking-tighter text-gray-900">{selectedCategory.name}</h2>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-10">
-                    {screenshots.filter(s => s.category === selectedCategoryId).map(s => (
+                    {currentItems.map(s => (
                       <div key={s.id} onClick={() => setZoomedImage(s)} className="archive-card bg-white p-5 border border-gray-100">
                         <div className="aspect-[4/3] bg-gray-50 rounded-xl overflow-hidden relative">
                            <MediaRenderer item={s} />
-                           {s.mediaType === 'video' && <div className="video-badge">VIDEO</div>}
+                           {s.mediaType === 'video' && <div className="video-label">VIDEO</div>}
                         </div>
                         <p className="mt-5 italic text-gray-500 truncate">{s.note || 'Untitled'}</p>
                       </div>
@@ -190,7 +181,6 @@
                   <div className="relative w-full h-full flex items-center justify-center">
                     <MediaRenderer item={zoomedImage} isZoomed={true} />
                     <button onClick={() => setZoomedImage(null)} className="absolute top-6 right-8 text-white text-4xl">✕</button>
-                    {zoomedImage.note && <div className="absolute bottom-10 bg-black/60 text-white p-6 rounded-2xl italic">{zoomedImage.note}</div>}
                   </div>
                 </div>
               )}
