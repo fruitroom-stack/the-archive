@@ -44,53 +44,40 @@
         .pill-btn { font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 7px 18px; border-radius: 9999px; letter-spacing: 0.1em; transition: all 0.2s; }
         .pill-btn-black { background-color: #000; color: #fff; border: 1px solid #000; }
         .pill-btn-red { background-color: #ef4444; color: #fff; }
+        .pill-btn-green { background-color: #22c55e; color: #fff; }
         .pill-btn-blue { background-color: #eff6ff; color: #2563eb; }
         .pill-btn-outline { border: 1px solid #e5e7eb; color: #9ca3af; }
-
-        /* --- 3열 그리드 카테고리 바 --- */
-        .cat-grid-container {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 12px;
-            border-radius: 1.5rem;
-            margin-top: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
         
-        .cat-grid-item {
-            padding: 8px;
-            border-radius: 12px;
-            font-size: 9px;
+        .category-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 999px;
+            font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            color: #fff;
-            background: rgba(255, 255, 255, 0.05);
             transition: all 0.2s;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            text-align: center;
+            cursor: pointer;
+            border: 2px solid transparent;
         }
         
-        .cat-grid-item:hover { background: rgba(255, 255, 255, 0.2); }
-        .cat-grid-item.active { background: #fff; color: #000; }
-
-        .cat-dot-small {
-            width: 5px;
-            height: 5px;
-            border-radius: 50%;
+        .category-badge:hover {
+            border-color: #000;
+            transform: scale(1.05);
+        }
+        
+        .category-badge.active {
+            border-color: #000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useMemo } = React;
+        const { useState, useMemo, useEffect } = React;
 
         function ScreenshotApp() {
           const [view, setView] = useState('home');
@@ -103,6 +90,7 @@
           const [selectedIds, setSelectedIds] = useState([]);
           const [isModalOpen, setIsModalOpen] = useState(false);
           const [sortBy, setSortBy] = useState('recent');
+          const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
           
           const [brandName, setBrandName] = useState('The Archive');
           const [curatorName, setCuratorName] = useState('Heewon');
@@ -120,12 +108,69 @@
 
           const currentItems = useMemo(() => {
             if (!selectedCategoryId) return [];
-            return screenshots.filter(s => s.category === selectedCategoryId);
-          }, [screenshots, selectedCategoryId]);
+            let items = screenshots.filter(s => s.category === selectedCategoryId);
+            if (showFavoritesOnly) items = items.filter(s => s.favorite);
+            
+            items.sort((a, b) => {
+              if (sortBy === 'date') return new Date(a.date) - new Date(b.date);
+              return sortBy === 'recent' ? new Date(b.date) - new Date(a.date) : new Date(a.date) - new Date(b.date);
+            });
+            
+            return items;
+          }, [screenshots, selectedCategoryId, sortBy, showFavoritesOnly]);
 
           const toggleId = (id) => {
             setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
           };
+          
+          const toggleFavorite = (id) => {
+            setScreenshots(prev => prev.map(s => s.id === id ? { ...s, favorite: !s.favorite } : s));
+          };
+          
+          const moveToCategory = (itemId, newCategoryId) => {
+            setScreenshots(prev => prev.map(s => s.id === itemId ? { ...s, category: newCategoryId } : s));
+          };
+          
+          const deleteScreenshot = (id) => {
+            setScreenshots(prev => prev.filter(s => s.id !== id));
+          };
+
+          // Keyboard navigation for zoom
+          useEffect(() => {
+            if (!zoomedImage && !zoomedImageInSort) return;
+            
+            const handleKeyDown = (e) => {
+              if (e.key === 'Escape') {
+                setZoomedImage(null);
+                setZoomedImageInSort(null);
+              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                if (zoomedImage) {
+                  // Category view navigation
+                  const currentIndex = currentItems.findIndex(s => s.id === zoomedImage.id);
+                  if (currentIndex === -1) return;
+                  
+                  if ((e.key === 'ArrowLeft' || e.key === 'ArrowUp') && currentIndex > 0) {
+                    setZoomedImage(currentItems[currentIndex - 1]);
+                  } else if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && currentIndex < currentItems.length - 1) {
+                    setZoomedImage(currentItems[currentIndex + 1]);
+                  }
+                } else if (zoomedImageInSort) {
+                  // Sort view navigation
+                  const currentIndex = uploadedFiles.findIndex(f => f.id === zoomedImageInSort.id);
+                  if (currentIndex === -1) return;
+                  
+                  if ((e.key === 'ArrowLeft' || e.key === 'ArrowUp') && currentIndex > 0) {
+                    setZoomedImageInSort(uploadedFiles[currentIndex - 1]);
+                  } else if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && currentIndex < uploadedFiles.length - 1) {
+                    setZoomedImageInSort(uploadedFiles[currentIndex + 1]);
+                  }
+                }
+              }
+            };
+            
+            window.addEventListener('keydown', handleKeyDown);
+            return () => window.removeEventListener('keydown', handleKeyDown);
+          }, [zoomedImage, zoomedImageInSort, currentItems, uploadedFiles]);
 
           const handleBackup = () => {
             const data = JSON.stringify({ screenshots, brandName, curatorName, categories }, null, 2);
@@ -170,11 +215,7 @@
             }
           };
 
-          const deleteScreenshot = (id) => {
-            setScreenshots(prev => prev.filter(s => s.id !== id));
-          };
-
-          const handleDeleteSelection = () => {
+          const handleDelete = () => {
             if (selectedIds.length === 0) return;
             if (confirm("Delete selected items?")) {
               if (view === 'sort') {
@@ -199,7 +240,9 @@
                     </div>
                     <div className="flex gap-2">
                         <button onClick={handleBackup} className="pill-btn pill-btn-blue">Backup</button>
-                        <label className="pill-btn pill-btn-outline cursor-pointer bg-white">Import <input type="file" accept=".json" onChange={handleImport} className="hidden" /></label>
+                        <label className="pill-btn pill-btn-outline cursor-pointer bg-white">
+                            Import <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                        </label>
                         <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline hover:bg-black hover:text-white transition-all">Settings</button>
                     </div>
                   </div>
@@ -209,11 +252,17 @@
                         const files = Array.from(e.target.files);
                         const promises = files.map(file => new Promise(res => {
                           const reader = new FileReader();
-                          reader.onload = (ev) => res({ id: Math.random().toString(36).substr(2, 9), preview: ev.target.result, note: '' });
+                          reader.onload = (ev) => res({ 
+                            id: Math.random().toString(36).substr(2, 9), 
+                            preview: ev.target.result, 
+                            note: '', 
+                            favorite: false,
+                            date: new Date().toISOString()
+                          });
                           reader.readAsDataURL(file);
                         }));
                         Promise.all(promises).then(res => { 
-                            setUploadedFiles(res); setView('sort'); setSelectedIds([]); setIsSelectMode(true); 
+                            setUploadedFiles(res); setView('sort'); setSelectedIds([]); setIsSelectMode(false); 
                         });
                     }} className="hidden" />
                   </label>
@@ -223,7 +272,9 @@
                               className="bg-white p-8 border border-gray-100 shadow-sm archive-card">
                         <div className="category-icon" style={{ backgroundColor: cat.color }}>{idx + 1}</div>
                         <div className="font-bold text-gray-900 text-base mb-1">{cat.name}</div>
-                        <div className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">{screenshots.filter(s => s.category === cat.id).length} Records</div>
+                        <div className="text-[9px] text-gray-300 font-bold uppercase tracking-widest">
+                            {screenshots.filter(s => s.category === cat.id).length} Records
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -233,28 +284,39 @@
               {/* --- 2. SETTINGS --- */}
               {view === 'settings' && (
                 <div className="max-w-2xl mx-auto px-6 py-20 text-left">
-                  <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 mb-12 tracking-[0.3em] hover:text-black">← Back</button>
-                  <h2 className="text-4xl italic font-light mb-16 tracking-tight">Settings</h2>
+                  <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 mb-12 tracking-[0.3em] hover:text-black transition-colors">← Back to Index</button>
+                  <h2 className="text-4xl italic font-light mb-16 tracking-tight">Personalize Your Archive</h2>
+                  
                   <div className="space-y-12 mb-20">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest border-b border-gray-100 pb-2">Main Identity</h3>
                     <div>
                       <label className="text-[9px] font-bold uppercase text-gray-400 block mb-2">Archive Title</label>
-                      <input value={brandName} onChange={e => setBrandName(e.target.value)} className="w-full border-b py-2 text-xl outline-none focus:border-black bg-transparent" />
+                      <input value={brandName} onChange={e => setBrandName(e.target.value)} className="w-full border-b py-2 text-xl outline-none focus:border-black bg-transparent font-sans" />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-gray-400 block mb-2">Your Name</label>
-                      <input value={curatorName} onChange={e => setCuratorName(e.target.value)} className="w-full border-b py-2 text-xl outline-none focus:border-black bg-transparent" />
+                      <label className="text-[9px] font-bold uppercase text-gray-400 block mb-2">Curator Name</label>
+                      <input value={curatorName} onChange={e => setCuratorName(e.target.value)} className="w-full border-b py-2 text-xl outline-none focus:border-black bg-transparent font-sans" />
                     </div>
                   </div>
+
                   <div className="space-y-6">
-                    <h3 className="text-[10px] font-black uppercase tracking-widest border-b pb-2">Edit Categories</h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-widest border-b border-gray-100 pb-2">Categories Setup</h3>
                     {categories.map((cat, idx) => (
                         <div key={cat.id} className="flex gap-4 items-center">
                             <span className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] text-white font-bold" style={{backgroundColor: cat.color}}>{idx+1}</span>
-                            <input value={cat.name} onChange={(e) => { const next = [...categories]; next[idx].name = e.target.value; setCategories(next); }} className="flex-grow border-b py-2 outline-none focus:border-black bg-transparent" />
+                            <input 
+                                value={cat.name} 
+                                onChange={(e) => {
+                                    const next = [...categories];
+                                    next[idx].name = e.target.value;
+                                    setCategories(next);
+                                }} 
+                                className="flex-grow border-b py-2 outline-none focus:border-black bg-transparent font-sans"
+                            />
                         </div>
                     ))}
                   </div>
-                  <button onClick={() => setView('home')} className="mt-20 w-full bg-black text-white py-5 rounded-2xl font-bold uppercase text-[11px] shadow-xl hover:opacity-90">Save Changes</button>
+                  <button onClick={() => setView('home')} className="mt-20 w-full bg-black text-white py-5 rounded-2xl font-bold uppercase text-[11px] shadow-xl hover:opacity-90">Save All Changes</button>
                 </div>
               )}
 
@@ -262,27 +324,33 @@
               {view === 'sort' && (
                 <div className="max-w-4xl mx-auto px-6 py-24 text-left">
                   <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b border-gray-100">
-                    <button onClick={() => setView('home')} className="text-[10px] font-bold uppercase text-gray-400">← Exit</button>
+                    <button onClick={() => {setView('home'); setUploadedFiles([]);}} className="text-[10px] font-bold uppercase text-gray-400">← Exit</button>
                     <div className="flex gap-3">
-                        {selectedIds.length > 0 && <button onClick={handleDeleteSelection} className="pill-btn pill-btn-red">Trash</button>}
+                        {selectedIds.length > 0 && <button onClick={handleDelete} className="pill-btn pill-btn-red">Trash</button>}
                         <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
-                        {selectedIds.length > 0 && <button onClick={() => setIsModalOpen(true)} className="pill-btn pill-btn-black">Archive ({selectedIds.length})</button>}
+                        {selectedIds.length > 0 && <button onClick={() => setIsModalOpen(true)} className="pill-btn pill-btn-black shadow-lg">Archive ({selectedIds.length})</button>}
                     </div>
                   </div>
                   {uploadedFiles.map(f => (
-                    <div key={f.id} onClick={() => toggleId(f.id)} className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 cursor-pointer transition-all ${selectedIds.includes(f.id) ? 'selected-item' : 'border-gray-100 shadow-sm'}`}>
-                      <div className="w-full md:w-1/2 relative aspect-video overflow-hidden rounded-[1rem]">
+                    <div key={f.id} onClick={() => isSelectMode ? toggleId(f.id) : setZoomedImageInSort(f)} className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 cursor-pointer transition-all ${selectedIds.includes(f.id) ? 'selected-item' : 'border-gray-100 shadow-sm hover:shadow-lg'}`}>
+                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem]">
                         <img src={f.preview} className={`w-full h-full object-cover transition-opacity ${selectedIds.includes(f.id) ? 'opacity-50' : 'opacity-100'}`} />
                         {selectedIds.includes(f.id) && <div className="check-badge">✓</div>}
                       </div>
-                      <div className="w-full md:w-1/2" onClick={e => e.stopPropagation()}><textarea placeholder="Note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-[2rem] p-8 text-base outline-none min-h-[200px]" /></div>
+                      <div className="w-full md:w-1/2" onClick={e => e.stopPropagation()}><textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-gray-50 rounded-[2rem] p-8 text-base outline-none min-h-[200px]" /></div>
                     </div>
                   ))}
                   {isModalOpen && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[2000]" onClick={() => setIsModalOpen(false)}>
                         <div className="bg-white p-8 rounded-[2.5rem] w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
                             {categories.map(c => <button key={c.id} onClick={() => {
-                                const news = uploadedFiles.filter(f => selectedIds.includes(f.id)).map(f => ({ ...f, category: c.id, id: Math.random().toString(36).substr(2, 9), date: new Date().toISOString() }));
+                                const news = uploadedFiles.filter(f => selectedIds.includes(f.id)).map(f => ({ 
+                                  ...f, 
+                                  category: c.id, 
+                                  id: Math.random().toString(36).substr(2, 9),
+                                  date: new Date().toISOString(),
+                                  favorite: false
+                                }));
                                 setScreenshots(prev => [...prev, ...news]);
                                 const rem = uploadedFiles.filter(f => !selectedIds.includes(f.id));
                                 setUploadedFiles(rem); setSelectedIds([]); setIsModalOpen(false); if (rem.length === 0) setView('home');
@@ -296,23 +364,42 @@
               {/* --- 4. CATEGORY VIEW --- */}
               {view === 'category' && selectedCategory && (
                 <div className="max-w-6xl mx-auto px-6 py-24 text-left">
-                  <div className="flex justify-between items-center mb-12">
+                  <div className="flex justify-between items-center mb-8">
                     <div className="flex items-center gap-4">
-                        <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 tracking-[0.2em] mr-4 hover:text-black">← Index</button>
+                        <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 tracking-[0.2em] mr-4">← Index</button>
                         <button onClick={() => handleExport('pdf')} className="pill-btn pill-btn-black">PDF</button>
                         <button onClick={() => handleExport('zip')} className="pill-btn pill-btn-black">ZIP</button>
-                        {isSelectMode && selectedIds.length > 0 && <button onClick={handleDeleteSelection} className="pill-btn pill-btn-red">Delete</button>}
+                        {isSelectMode && selectedIds.length > 0 && <button onClick={handleDelete} className="pill-btn pill-btn-red">Delete</button>}
                     </div>
-                    <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select Items'}</button>
+                    <div className="flex gap-2">
+                        <button 
+                          onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                          className={`pill-btn ${showFavoritesOnly ? 'pill-btn-black' : 'pill-btn-outline'}`}
+                        >
+                          {showFavoritesOnly ? '⭐ Favorites Only' : '⭐ All'}
+                        </button>
+                        <select 
+                          value={sortBy} 
+                          onChange={(e) => setSortBy(e.target.value)}
+                          className="pill-btn pill-btn-outline cursor-pointer bg-white"
+                        >
+                          <option value="recent">Recent First</option>
+                          <option value="oldest">Oldest First</option>
+                          <option value="date">By Date</option>
+                        </select>
+                        <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+                    </div>
                   </div>
                   <h2 className="text-7xl italic font-light tracking-tighter mb-20 text-gray-900">{selectedCategory.name}</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
+                  <div className="space-y-8">
                     {currentItems.map(s => (
-                      <div key={s.id} onClick={() => isSelectMode ? toggleId(s.id) : setZoomedImage(s)} 
-                           className={`relative archive-card ${selectedIds.includes(s.id) ? 'selected-item' : ''}`}>
-                        <div className="aspect-video overflow-hidden bg-white mb-6 border border-gray-100 rounded-lg shadow-sm">
-                          <img src={s.preview} className={`w-full h-full object-cover transition-opacity ${isSelectMode && !selectedIds.includes(s.id) ? 'opacity-40' : 'opacity-100'}`} />
+                      <div key={s.id} onClick={() => isSelectMode ? toggleId(s.id) : setZoomedImage(s)} className={`relative archive-card cursor-pointer ${selectedIds.includes(s.id) ? 'selected-item' : ''}`}>
+                        <div className="overflow-hidden bg-gray-50 mb-4 border border-gray-100 rounded-lg shadow-sm relative max-w-4xl mx-auto" style={{maxHeight: '600px'}}>
+                          <img src={s.preview} className={`w-full h-auto object-contain transition-opacity ${isSelectMode && !selectedIds.includes(s.id) ? 'opacity-40' : 'opacity-100'}`} style={{maxHeight: '600px'}} />
                           {selectedIds.includes(s.id) && <div className="check-badge">✓</div>}
+                          {s.favorite && !isSelectMode && (
+                            <div className="absolute top-3 right-3 text-2xl">⭐</div>
+                          )}
                         </div>
                         <p className="italic text-base text-gray-500 line-clamp-1">{s.note || 'Untitled'}</p>
                       </div>
@@ -321,40 +408,279 @@
                 </div>
               )}
 
-              {/* --- ZOOM VIEW (3열 카테고리 배치) --- */}
+              {/* --- ENHANCED ZOOM VIEW --- */}
               {zoomedImage && (
                 <div className="fixed inset-0 bg-black/95 z-[5000] flex items-center justify-center p-4" onClick={() => setZoomedImage(null)}>
                   <div className="relative w-full h-full flex items-center justify-center">
-                    <img src={zoomedImage.preview} className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
+                    <img 
+                      src={zoomedImage.preview} 
+                      className="max-w-full max-h-full object-contain" 
+                      onClick={(e) => e.stopPropagation()}
+                    />
                     
-                    {/* 우측 조작 패널 */}
-                    <div className="absolute top-4 right-4 flex flex-col items-end gap-2 z-[5100]" onClick={e => e.stopPropagation()}>
-                        <div className="flex gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); deleteScreenshot(zoomedImage.id); setZoomedImage(null); }} className="pill-btn pill-btn-red shadow-lg">Trash</button>
-                            <button onClick={() => setZoomedImage(null)} className="pill-btn pill-btn-black shadow-lg">Close</button>
-                        </div>
-                        
-                        {/* 얌전한 3열 카테고리 그리드 */}
-                        <div className="cat-grid-container w-64">
-                            {categories.map((cat, idx) => (
-                                <button key={cat.id} 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setScreenshots(prev => prev.map(s => s.id === zoomedImage.id ? { ...s, category: cat.id } : s));
-                                            setZoomedImage(prev => ({ ...prev, category: cat.id }));
-                                        }}
-                                        className={`cat-grid-item ${zoomedImage.category === cat.id ? 'active' : ''}`}>
-                                    <div className="cat-dot-small" style={{ backgroundColor: cat.color }} />
-                                    <span>{cat.name.split('. ')[1]}</span>
-                                </button>
-                            ))}
-                        </div>
+                    {/* Position counter and favorite */}
+                    {(() => {
+                      const currentIndex = currentItems.findIndex(s => s.id === zoomedImage.id);
+                      return (
+                        <>
+                          {/* Navigation arrows */}
+                          {currentIndex > 0 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setZoomedImage(currentItems[currentIndex - 1]);
+                              }}
+                              className="absolute left-1/2 -translate-x-1/2 top-4 bg-white/20 hover:bg-white/30 text-white px-6 py-2 rounded-full text-2xl transition-all"
+                            >
+                              ↑
+                            </button>
+                          )}
+                          {currentIndex < currentItems.length - 1 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setZoomedImage(currentItems[currentIndex + 1]);
+                              }}
+                              className="absolute left-1/2 -translate-x-1/2 bottom-4 bg-white/20 hover:bg-white/30 text-white px-6 py-2 rounded-full text-2xl transition-all"
+                            >
+                              ↓
+                            </button>
+                          )}
+                          
+                          {/* Position and favorite */}
+                          <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1 rounded-lg text-sm">
+                            {currentIndex + 1} / {currentItems.length}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavorite(zoomedImage.id);
+                              setZoomedImage(prev => ({ ...prev, favorite: !prev.favorite }));
+                            }}
+                            className="absolute top-16 left-4 bg-white/90 hover:bg-white text-4xl p-2 rounded-full transition-all"
+                          >
+                            {zoomedImage.favorite ? '⭐' : '☆'}
+                          </button>
+                        </>
+                      );
+                    })()}
+                    
+                    {/* Category bar at RIGHT SIDE - VERTICAL */}
+                    <div className="absolute top-1/2 -translate-y-1/2 right-4 bg-white/95 backdrop-blur rounded-2xl shadow-xl p-3 flex flex-col gap-3 max-h-[80vh] overflow-y-auto z-50" onClick={(e) => e.stopPropagation()}>
+                      {categories.map((cat, idx) => (
+                        <button
+                          key={cat.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moveToCategory(zoomedImage.id, cat.id);
+                            setZoomedImage(prev => ({ ...prev, category: cat.id }));
+                          }}
+                          className={`category-badge flex-col items-center justify-center w-24 h-24 ${zoomedImage.category === cat.id ? 'active' : ''}`}
+                          style={{
+                            backgroundColor: zoomedImage.category === cat.id ? cat.color + '40' : 'white',
+                          }}
+                        >
+                          <div 
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold mb-2"
+                            style={{ backgroundColor: cat.color }}
+                          >
+                            {idx + 1}
+                          </div>
+                          <span className="text-gray-900 text-[9px] text-center leading-tight">{cat.name.replace(/^\d+\.\s*/, '')}</span>
+                        </button>
+                      ))}
                     </div>
                     
+                    {/* Action buttons - TOP RIGHT */}
+                    <div className="absolute top-4 right-4 flex gap-2 z-50">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const currentIndex = currentItems.findIndex(s => s.id === zoomedImage.id);
+                          deleteScreenshot(zoomedImage.id);
+                          
+                          if (currentItems.length > 1) {
+                            if (currentIndex < currentItems.length - 1) {
+                              setZoomedImage(currentItems[currentIndex + 1]);
+                            } else if (currentIndex > 0) {
+                              setZoomedImage(currentItems[currentIndex - 1]);
+                            } else {
+                              setZoomedImage(null);
+                            }
+                          } else {
+                            setZoomedImage(null);
+                          }
+                        }}
+                        className="pill-btn pill-btn-red shadow-lg"
+                      >
+                        Trash
+                      </button>
+                      <button
+                        onClick={() => setZoomedImage(null)}
+                        className="pill-btn pill-btn-black shadow-lg"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    
+                    {/* Note at bottom */}
                     {zoomedImage.note && (
-                        <div className="absolute bottom-10 left-10 max-w-lg bg-black/60 backdrop-blur-md p-6 rounded-2xl text-white italic text-sm border border-white/10">
-                            {zoomedImage.note}
-                        </div>
+                      <div className="absolute bottom-4 left-4 right-4 bg-black/70 text-white p-4 rounded-lg text-sm italic">
+                        {zoomedImage.note}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* --- ZOOM VIEW FOR SORT --- */}
+              {zoomedImageInSort && (
+                <div className="fixed inset-0 bg-black/95 z-[5000] flex items-center justify-center p-4" onClick={() => setZoomedImageInSort(null)}>
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    <img 
+                      src={zoomedImageInSort.preview} 
+                      className="max-w-full max-h-full object-contain" 
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    
+                    {/* Position counter */}
+                    {(() => {
+                      const currentIndex = uploadedFiles.findIndex(f => f.id === zoomedImageInSort.id);
+                      return (
+                        <>
+                          {/* Navigation arrows */}
+                          {currentIndex > 0 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setZoomedImageInSort(uploadedFiles[currentIndex - 1]);
+                              }}
+                              className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 text-white p-4 rounded-full text-2xl transition-all"
+                            >
+                              ←
+                            </button>
+                          )}
+                          {currentIndex < uploadedFiles.length - 1 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setZoomedImageInSort(uploadedFiles[currentIndex + 1]);
+                              }}
+                              className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 text-white p-4 rounded-full text-2xl transition-all"
+                            >
+                              →
+                            </button>
+                          )}
+                          
+                          {/* Position */}
+                          <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1 rounded-lg text-sm">
+                            {currentIndex + 1} / {uploadedFiles.length}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    
+                    {/* Category bar at RIGHT SIDE - VERTICAL */}
+                    <div className="absolute top-1/2 -translate-y-1/2 right-4 bg-white/95 backdrop-blur rounded-2xl shadow-xl p-3 flex flex-col gap-3 max-h-[80vh] overflow-y-auto z-50" onClick={(e) => e.stopPropagation()}>
+                      {categories.map((cat, idx) => (
+                        <button
+                          key={cat.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUploadedFiles(prev => prev.map(f => 
+                              f.id === zoomedImageInSort.id ? { ...f, category: cat.id } : f
+                            ));
+                            setZoomedImageInSort(prev => ({ ...prev, category: cat.id }));
+                          }}
+                          className={`category-badge flex-col items-center justify-center w-24 h-24 ${zoomedImageInSort.category === cat.id ? 'active' : ''}`}
+                          style={{
+                            backgroundColor: zoomedImageInSort.category === cat.id ? cat.color + '40' : 'white',
+                          }}
+                        >
+                          <div 
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold mb-2"
+                            style={{ backgroundColor: cat.color }}
+                          >
+                            {idx + 1}
+                          </div>
+                          <span className="text-gray-900 text-[9px] text-center leading-tight">{cat.name.replace(/^\d+\.\s*/, '')}</span>
+                        </button>
+                      ))}
+                    </div>
+                    
+                    {/* Action buttons - TOP RIGHT */}
+                    <div className="absolute top-4 right-4 flex gap-2 z-50">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Archive this single item
+                          if (!zoomedImageInSort.category) {
+                            alert('Please select a category first!');
+                            return;
+                          }
+                          const newItem = {
+                            ...zoomedImageInSort,
+                            id: Math.random().toString(36).substr(2, 9),
+                            date: new Date().toISOString(),
+                            favorite: false
+                          };
+                          setScreenshots(prev => [...prev, newItem]);
+                          
+                          // Remove from uploaded and move to next
+                          const currentIndex = uploadedFiles.findIndex(f => f.id === zoomedImageInSort.id);
+                          const remaining = uploadedFiles.filter(f => f.id !== zoomedImageInSort.id);
+                          setUploadedFiles(remaining);
+                          
+                          if (remaining.length > 0) {
+                            if (currentIndex < remaining.length) {
+                              setZoomedImageInSort(remaining[currentIndex]);
+                            } else {
+                              setZoomedImageInSort(remaining[currentIndex - 1]);
+                            }
+                          } else {
+                            setZoomedImageInSort(null);
+                            setView('home');
+                          }
+                        }}
+                        className="pill-btn pill-btn-green shadow-lg"
+                      >
+                        Archive
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const currentIndex = uploadedFiles.findIndex(f => f.id === zoomedImageInSort.id);
+                          const remaining = uploadedFiles.filter(f => f.id !== zoomedImageInSort.id);
+                          setUploadedFiles(remaining);
+                          
+                          if (remaining.length > 0) {
+                            if (currentIndex < remaining.length) {
+                              setZoomedImageInSort(remaining[currentIndex]);
+                            } else {
+                              setZoomedImageInSort(remaining[currentIndex - 1]);
+                            }
+                          } else {
+                            setZoomedImageInSort(null);
+                            setView('home');
+                          }
+                        }}
+                        className="pill-btn pill-btn-red shadow-lg"
+                      >
+                        Trash
+                      </button>
+                      <button
+                        onClick={() => setZoomedImageInSort(null)}
+                        className="pill-btn pill-btn-black shadow-lg"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    
+                    {/* Note at bottom */}
+                    {zoomedImageInSort.note && (
+                      <div className="absolute bottom-4 left-4 right-4 bg-black/70 text-white p-4 rounded-lg text-sm italic">
+                        {zoomedImageInSort.note}
+                      </div>
                     )}
                   </div>
                 </div>
