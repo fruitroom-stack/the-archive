@@ -42,19 +42,20 @@
           const [isSelectMode, setIsSelectMode] = useState(false);
           const [selectedIds, setSelectedIds] = useState([]);
           const [isModalOpen, setIsModalOpen] = useState(false);
+          
+          // Settings States
           const [brandName, setBrandName] = useState('The Archive');
           const [curatorName, setCuratorName] = useState('Heewon');
-
-          const categories = [
+          const [categories, setCategories] = useState([
             { id: 'cat1', name: 'Ideas & Notes', color: '#FFD93D' }, 
             { id: 'cat2', name: 'Home & Interior', color: '#95E1D3' },
             { id: 'cat3', name: 'Health & Fitness', color: '#6BCB77' },
             { id: 'cat4', name: 'Fashion & Shopping', color: '#FCBAD3' },
             { id: 'cat5', name: 'Study & Learning', color: '#F38181' },
             { id: 'cat6', name: 'Misc', color: '#9E9E9E' }
-          ];
+          ]);
 
-          const selectedCategory = useMemo(() => categories.find(c => c.id === selectedCategoryId), [selectedCategoryId]);
+          const selectedCategory = useMemo(() => categories.find(c => c.id === selectedCategoryId), [categories, selectedCategoryId]);
 
           // 비디오 썸네일 기술
           const extractThumb = (file) => {
@@ -73,13 +74,19 @@
             });
           };
 
-          // [핵심 기능] 웹사이트 전체 페이지 PDF 캡처 (인쇄 방식 응용)
-          const downloadFullPageWebsitePDF = (url) => {
-            // 외부 고성능 PDF 변환 API 활용 (PDFShift 등과 유사한 원리)
-            const pdfUrl = `https://api.screenshotlayer.com/api/capture?access_key=YOUR_KEY&url=${encodeURIComponent(url)}&fullpage=1&pdf=1`;
-            // 데모를 위해 새 창에서 인쇄 스트림 열기
-            window.open(`https://www.google.com/search?q=pdf+generator+for+${encodeURIComponent(url)}`, '_blank');
-            alert("입력하신 웹사이트 전체를 스캔하여 PDF로 변환하는 엔진이 가동됩니다.");
+          const handleFileUpload = async (e) => {
+            const files = Array.from(e.target.files);
+            const processed = await Promise.all(files.map(async file => {
+              const isVideo = file.type.startsWith('video/');
+              return {
+                id: Math.random().toString(36).substr(2, 9),
+                preview: URL.createObjectURL(file),
+                thumbnail: isVideo ? await extractThumb(file) : null,
+                mediaType: isVideo ? 'video' : 'image',
+                note: '', date: new Date().toISOString()
+              };
+            }));
+            setUploadedFiles(processed); setView('sort');
           };
 
           const handleWebLink = () => {
@@ -97,23 +104,6 @@
             setView('sort');
           };
 
-          const handleFileUpload = async (e) => {
-            const files = Array.from(e.target.files);
-            const processed = await Promise.all(files.map(async file => {
-              const isVideo = file.type.startsWith('video/');
-              return {
-                id: Math.random().toString(36).substr(2, 9),
-                preview: URL.createObjectURL(file),
-                thumbnail: isVideo ? await extractThumb(file) : null,
-                mediaType: isVideo ? 'video' : 'image',
-                note: '', date: new Date().toISOString()
-              };
-            }));
-            setUploadedFiles(processed); setView('sort');
-          };
-
-          const toggleId = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-
           const saveAsLayoutPDF = () => {
             const element = document.getElementById('pdf-content');
             const excludeElements = element.querySelectorAll('.no-print, button, label, .check-badge, .video-label');
@@ -127,21 +117,6 @@
               if (!isZoomed && item.thumbnail) return <img src={item.thumbnail} className="w-full h-full object-cover" />;
               return <video src={item.preview} className="w-full h-full object-contain" autoPlay loop muted={!isZoomed} controls={isZoomed} playsInline />;
             }
-            if (item.mediaType === 'website') {
-              return (
-                <div className="w-full h-full relative">
-                  <img src={item.preview} className="w-full h-full object-cover" crossOrigin="anonymous" />
-                  {isZoomed && (
-                    <button 
-                      onClick={() => downloadFullPageWebsitePDF(item.originalUrl)}
-                      className="absolute top-4 left-4 bg-white/90 text-black px-4 py-2 rounded-full font-bold text-xs shadow-xl"
-                    >
-                      📄 Save Full Page as PDF
-                    </button>
-                  )}
-                </div>
-              );
-            }
             return <img src={item.preview} className="w-full h-full object-cover" crossOrigin="anonymous" />;
           };
 
@@ -153,14 +128,13 @@
                   <div className="flex justify-between items-start mb-12">
                     <div><h1 className="text-5xl italic font-light tracking-tight mb-2">{brandName}</h1><p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold tracking-widest">Curated by {curatorName}</p></div>
                     <div className="flex gap-2">
-                        <button onClick={() => saveAs(new Blob([JSON.stringify({screenshots, brandName, curatorName})], {type: 'application/json'}), 'backup.json')} className="pill-btn bg-blue-50 text-blue-600">Backup</button>
-                        <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline">Settings</button>
+                        <button onClick={() => saveAs(new Blob([JSON.stringify({screenshots, brandName, curatorName, categories})], {type: 'application/json'}), 'backup.json')} className="pill-btn bg-blue-50 text-blue-600">Backup</button>
+                        <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline hover:bg-black hover:text-white transition-all">Settings</button>
                     </div>
                   </div>
                   <div className="flex gap-4 mb-16 no-print">
                       <label className="flex-1 bg-black text-white py-12 rounded-3xl flex items-center justify-center cursor-pointer hover:opacity-90 font-bold uppercase shadow-2xl">
-                        Add Image
-                        <input type="file" multiple accept="image/*,video/*" onChange={handleFileUpload} className="hidden" />
+                        Add Image <input type="file" multiple accept="image/*,video/*" onChange={handleFileUpload} className="hidden" />
                       </label>
                       <button onClick={handleWebLink} className="flex-1 bg-white border-2 border-black text-black py-12 rounded-3xl flex items-center justify-center font-bold uppercase shadow-xl hover:bg-gray-50 transition-all">
                         Add Website
@@ -178,49 +152,72 @@
                 </div>
               )}
 
-              {/* --- 2. SORT VIEW (웹 카드 미리보기 가능) --- */}
-              {view === 'sort' && (
-                <div id="pdf-content" className="max-w-4xl mx-auto px-6 py-24">
-                  <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b border-gray-100 no-print">
-                    <button onClick={() => {setView('home'); setUploadedFiles([]);}} className="text-[10px] font-bold uppercase text-gray-400">← Exit</button>
-                    <div className="flex gap-3">
-                        <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
-                        {!isSelectMode && (
-                            <button onClick={() => { const news = uploadedFiles.map(f => ({ ...f, category: categories[0].id })); setScreenshots(prev => [...prev, ...news]); setUploadedFiles([]); setView('home'); }} className="pill-btn pill-btn-black shadow-lg">Save All</button>
-                        )}
+              {/* --- 2. SETTINGS (복구됨) --- */}
+              {view === 'settings' && (
+                <div className="max-w-2xl mx-auto px-6 py-20 text-left">
+                  <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 mb-12 tracking-[0.3em] hover:text-black transition-colors">← Back to Index</button>
+                  <h2 className="text-4xl italic font-light mb-16 tracking-tight">Personalize Your Archive</h2>
+                  <div className="space-y-12 mb-20">
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-gray-400 block mb-2">Archive Title</label>
+                      <input value={brandName} onChange={e => setBrandName(e.target.value)} className="w-full border-b py-2 text-xl outline-none focus:border-black bg-transparent" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-gray-400 block mb-2">Curator Name</label>
+                      <input value={curatorName} onChange={e => setCuratorName(e.target.value)} className="w-full border-b py-2 text-xl outline-none focus:border-black bg-transparent" />
                     </div>
                   </div>
+                  <div className="space-y-6">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest border-b pb-2 mb-6">Categories Setup</h3>
+                    {categories.map((cat, idx) => (
+                        <div key={cat.id} className="flex gap-4 items-center">
+                            <span className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] text-white font-bold" style={{backgroundColor: cat.color}}>{idx+1}</span>
+                            <input value={cat.name} onChange={(e) => {
+                                const next = [...categories];
+                                next[idx].name = e.target.value;
+                                setCategories(next);
+                            }} className="flex-grow border-b py-2 outline-none focus:border-black bg-transparent" />
+                        </div>
+                    ))}
+                  </div>
+                  <button onClick={() => setView('home')} className="mt-20 w-full bg-black text-white py-5 rounded-2xl font-bold uppercase text-[11px] shadow-xl hover:opacity-90">Save All Changes</button>
+                </div>
+              )}
+
+              {/* --- 3. SORT VIEW --- */}
+              {view === 'sort' && (
+                <div id="pdf-content" className="max-w-4xl mx-auto px-6 py-24">
+                  <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b no-print">
+                    <button onClick={() => {setView('home'); setUploadedFiles([]);}} className="text-[10px] font-bold uppercase text-gray-400">← Exit</button>
+                    <button onClick={() => {
+                        const news = uploadedFiles.map(f => ({ ...f, category: categories[0].id }));
+                        setScreenshots(prev => [...prev, ...news]); setUploadedFiles([]); setView('home');
+                    }} className="pill-btn pill-btn-black shadow-lg">Save All to First Category</button>
+                  </div>
                   {uploadedFiles.map(f => (
-                    <div key={f.id} onClick={() => isSelectMode && toggleId(f.id)} className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 transition-all ${selectedIds.includes(f.id) ? 'selected-item' : 'shadow-sm'}`}>
-                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50 flex items-center justify-center">
-                        <MediaRenderer item={f} isZoomed={true} />
-                        {f.mediaType === 'video' && <div className="video-label no-print">VIDEO</div>}
-                        {selectedIds.includes(f.id) && <div className="check-badge no-print">✓</div>}
+                    <div key={f.id} className="bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 shadow-sm">
+                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50">
+                        <MediaRenderer item={f} />
                       </div>
-                      <div className="w-full md:w-1/2" onClick={e => e.stopPropagation()}><textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-transparent p-2 text-base outline-none min-h-[100px] font-serif italic" /></div>
+                      <div className="w-full md:w-1/2"><textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-transparent p-2 text-base outline-none min-h-[100px] font-serif italic" /></div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* --- 3. CATEGORY VIEW --- */}
+              {/* --- 4. CATEGORY VIEW --- */}
               {view === 'category' && selectedCategory && (
                 <div id="pdf-content" className="max-w-6xl mx-auto px-6 py-24 text-left">
                   <div className="flex justify-between items-center mb-16 no-print">
-                    <div className="flex gap-4">
-                        <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 mr-4">← Index</button>
-                        <button onClick={saveAsLayoutPDF} className="pill-btn pill-btn-black">Download PDF</button>
-                    </div>
-                    <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+                    <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 mr-4">← Index</button>
+                    <button onClick={saveAsLayoutPDF} className="pill-btn pill-btn-black">Download PDF</button>
                   </div>
                   <h2 className="text-7xl italic font-light tracking-tighter text-gray-900 mb-20">{selectedCategory.name}</h2>
                   <div className="space-y-16">
                     {screenshots.filter(s => s.category === selectedCategoryId).map(s => (
-                      <div key={s.id} onClick={() => isSelectMode ? toggleId(s.id) : setZoomedImage(s)} className={`relative archive-card flex flex-col md:flex-row gap-12 items-start ${selectedIds.includes(s.id) ? 'selected-item' : ''}`}>
+                      <div key={s.id} className="relative archive-card flex flex-col md:flex-row gap-12 items-start">
                         <div className="w-full md:w-3/5 aspect-video bg-gray-50 rounded-xl overflow-hidden relative shadow-sm">
-                           <MediaRenderer item={s} isZoomed={false} />
-                           {s.mediaType === 'video' && <div className="video-label no-print">VIDEO</div>}
-                           {selectedIds.includes(s.id) && <div className="check-badge no-print">✓</div>}
+                           <MediaRenderer item={s} />
                         </div>
                         <div className="w-full md:w-2/5 pt-4">
                             <p className="text-xl font-serif italic text-gray-700 leading-relaxed">{s.note || 'No description added.'}</p>
@@ -239,4 +236,4 @@
         root.render(<ScreenshotApp />);
     </script>
 </body>
-</html
+</html>
