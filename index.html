@@ -19,7 +19,7 @@
         .archive-card { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; border-radius: 1.5rem; position: relative; border: 1px solid #eee; overflow: hidden; }
         .archive-card:hover { transform: translateY(-8px); border-color: #000; }
         .category-icon { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: bold; font-style: italic; margin: 0 auto 1.5rem; box-shadow: inset 0 0 10px rgba(0,0,0,0.05); }
-        .selected-item { outline: 4px solid #000 !important; outline-offset: -4px; transform: scale(0.96); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.15) !important; }
+        .selected-item { outline: 4px solid #000 !important; outline-offset: -4px; transform: scale(0.96) !important; border-radius: 1.5rem !important; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.15) !important; }
         .top-action-bar { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes slideDown { from { transform: translate(-50%, -120%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         .check-badge { position: absolute; top: 16px; left: 16px; width: 36px; height: 36px; background-color: #000; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 900; border: 3px solid #fff; z-index: 50; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
@@ -28,6 +28,7 @@
         .pill-btn-outline { border: 1px solid #e5e7eb; color: #9ca3af; }
         .video-label { position: absolute; bottom: 14px; right: 14px; background: rgba(0,0,0,0.75); color: white; padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: bold; z-index: 10; }
         .link-text { color: #2563eb; text-decoration: underline; cursor: pointer; word-break: break-all; }
+        @media print { .no-print { display: none !important; } }
     </style>
 </head>
 <body>
@@ -57,7 +58,7 @@
 
           const selectedCategory = useMemo(() => categories.find(c => c.id === selectedCategoryId), [categories, selectedCategoryId]);
 
-          // 비디오 기술 (맥 호환성)
+          // 비디오 썸네일 추출 (안정성 강화)
           const extractThumb = (file) => {
             return new Promise((resolve) => {
               const video = document.createElement('video');
@@ -86,19 +87,15 @@
                 note: '', date: new Date().toISOString()
               };
             }));
-            setUploadedFiles(processed); setView('sort');
+            setUploadedFiles(processed); setView('sort'); setSelectedIds([]); setIsSelectMode(false);
           };
 
-          // [New] 웹사이트 추가 시 분할 이미지 생성 효과
           const handleWebLink = () => {
             const url = prompt("아카이브할 웹사이트 주소를 입력하세요:");
             if (!url) return;
-            
-            // 데모용: 웹사이트를 5단계 섹션으로 나누어 캡처한 것처럼 다수의 카드를 생성
-            const baseUrl = `https://api.microlink.io?url=${encodeURIComponent(url)}&screenshot=true&embed=screenshot.url`;
             const newLinkCard = {
               id: Math.random().toString(36).substr(2, 9),
-              preview: baseUrl,
+              preview: `https://api.microlink.io?url=${encodeURIComponent(url)}&screenshot=true&embed=screenshot.url`,
               mediaType: 'website',
               originalUrl: url,
               note: `Visit Website: ${url}`,
@@ -114,15 +111,7 @@
             const element = document.getElementById('pdf-content');
             const excludeElements = element.querySelectorAll('.no-print, button, label, .check-badge, .video-label');
             excludeElements.forEach(el => el.style.display = 'none');
-            
-            const options = { 
-                margin: 10, 
-                filename: `${brandName}_Archive.pdf`, 
-                image: { type: 'jpeg', quality: 0.98 }, 
-                html2canvas: { scale: 2, useCORS: true, letterRendering: true }, 
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
-            };
-            
+            const options = { margin: 10, filename: `${brandName}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
             html2pdf().set(options).from(element).save().then(() => excludeElements.forEach(el => el.style.display = ''));
           };
 
@@ -136,11 +125,18 @@
 
           return (
             <div className="min-h-screen">
-              {/* --- 상단 액션 바 --- */}
+              {/* --- 상단 액션 바 (선택 시에만 노출) --- */}
               {isSelectMode && selectedIds.length > 0 && (
-                <div className="top-action-bar bg-black text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-10">
+                <div className="top-action-bar bg-black text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-10 no-print">
                   <span className="text-[12px] font-black border-r border-gray-700 pr-10">{selectedIds.length} SELECTED</span>
-                  <button onClick={saveAsLayoutPDF} className="pill-btn bg-blue-500 text-white">PDF Export</button>
+                  <button onClick={() => {
+                    const zip = new JSZip();
+                    const list = view === 'sort' ? uploadedFiles : screenshots;
+                    const items = list.filter(f => selectedIds.includes(f.id));
+                    items.forEach((item, i) => zip.file(`file_${i+1}.jpg`, item.preview.split(',')[1], {base64: true}));
+                    zip.generateAsync({type: "blob"}).then(content => saveAs(content, "export.zip"));
+                  }} className="text-[11px] font-bold uppercase hover:text-yellow-400">ZIP</button>
+                  <button onClick={saveAsLayoutPDF} className="text-[11px] font-bold uppercase hover:text-blue-400">PDF</button>
                   <button onClick={() => {
                       if (view === 'sort') setUploadedFiles(prev => prev.filter(f => !selectedIds.includes(f.id)));
                       else setScreenshots(prev => prev.filter(s => !selectedIds.includes(s.id)));
@@ -149,14 +145,14 @@
                 </div>
               )}
 
-              {/* --- HOME VIEW --- */}
+              {/* --- 1. HOME --- */}
               {view === 'home' && (
                 <div className="max-w-4xl mx-auto px-6 py-10 text-left">
                   <div className="flex justify-between items-start mb-12">
-                    <div><h1 className="text-5xl italic font-light tracking-tight mb-2">{brandName}</h1><p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold tracking-widest">Curated by {curatorName}</p></div>
+                    <div><h1 className="text-5xl italic font-light tracking-tight mb-2">{brandName}</h1><p className="text-[10px] tracking-[0.4em] uppercase text-gray-400 font-bold">Curated by {curatorName}</p></div>
                     <div className="flex gap-2">
                         <button onClick={() => saveAs(new Blob([JSON.stringify({screenshots, brandName, curatorName, categories})], {type: 'application/json'}), 'backup.json')} className="pill-btn bg-blue-50 text-blue-600">Backup</button>
-                        <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline">Settings</button>
+                        <button onClick={() => setView('settings')} className="pill-btn pill-btn-outline hover:bg-black hover:text-white transition-all">Settings</button>
                     </div>
                   </div>
                   <div className="flex gap-4 mb-16 no-print">
@@ -179,10 +175,10 @@
                 </div>
               )}
 
-              {/* --- SETTINGS VIEW --- */}
+              {/* --- 2. SETTINGS --- */}
               {view === 'settings' && (
                 <div className="max-w-2xl mx-auto px-6 py-20 text-left">
-                  <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 mb-12 tracking-[0.3em] hover:text-black">← Back to Index</button>
+                  <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 mb-12 tracking-[0.3em] hover:text-black">← Index</button>
                   <h2 className="text-4xl italic font-light mb-16 tracking-tight">Personalize Your Archive</h2>
                   <div className="space-y-12 mb-20">
                     <div><label className="text-[9px] font-bold uppercase text-gray-400 block mb-2">Archive Title</label><input value={brandName} onChange={e => setBrandName(e.target.value)} className="w-full border-b py-2 text-xl outline-none focus:border-black bg-transparent" /></div>
@@ -201,39 +197,42 @@
                 </div>
               )}
 
-              {/* --- SORT VIEW --- */}
+              {/* --- 3. SORT VIEW --- */}
               {view === 'sort' && (
                 <div id="pdf-content" className="max-w-4xl mx-auto px-6 py-24">
-                  <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b no-print">
+                  <div className="flex justify-between items-center mb-12 sticky top-0 bg-[#FDFCFB]/90 backdrop-blur-md z-50 py-4 border-b border-gray-100 no-print">
                     <button onClick={() => {setView('home'); setUploadedFiles([]); setIsSelectMode(false);}} className="text-[10px] font-bold uppercase text-gray-400">← Exit</button>
                     <div className="flex gap-3">
                         <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
-                        {isSelectMode && <button onClick={() => setSelectedIds(uploadedFiles.map(f => f.id))} className="pill-btn pill-btn-outline">Select All</button>}
-                        {!isSelectMode && <button onClick={() => { const news = uploadedFiles.map(f => ({ ...f, category: categories[0].id })); setScreenshots(prev => [...prev, ...news]); setUploadedFiles([]); setView('home'); }} className="pill-btn pill-btn-black shadow-lg">Save All</button>}
+                        {isSelectMode && <button onClick={() => setSelectedIds(selectedIds.length === uploadedFiles.length ? [] : uploadedFiles.map(f => f.id))} className="pill-btn pill-btn-outline">Select All</button>}
+                        {!isSelectMode && <button onClick={() => { const news = uploadedFiles.map(f => ({ ...f, category: categories[0].id })); setScreenshots(prev => [...prev, ...news]); setUploadedFiles([]); setView('home'); }} className="pill-btn pill-btn-black shadow-lg">Archive All</button>}
                     </div>
                   </div>
                   {uploadedFiles.map(f => (
                     <div key={f.id} onClick={() => isSelectMode && toggleId(f.id)} className={`bg-white p-10 rounded-[2.5rem] border flex flex-col md:flex-row gap-12 items-center mb-10 transition-all ${selectedIds.includes(f.id) ? 'selected-item' : 'shadow-sm'}`}>
-                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-50 flex items-center justify-center">
+                      <div className="w-full md:w-1/2 relative aspect-square overflow-hidden rounded-[2rem] bg-gray-100 flex items-center justify-center">
                         <MediaRenderer item={f} />
                         {selectedIds.includes(f.id) && <div className="check-badge no-print">✓</div>}
                       </div>
                       <div className="w-full md:w-1/2">
                           <textarea placeholder="Add a note..." value={f.note} onChange={(e) => setUploadedFiles(uploadedFiles.map(i => i.id === f.id ? {...i, note: e.target.value} : i))} className="w-full bg-transparent p-2 text-base outline-none min-h-[100px] font-serif italic mb-4" />
-                          {f.originalUrl && <a href={f.originalUrl} target="_blank" className="link-text text-xs no-print">Visit Original Website →</a>}
+                          {f.originalUrl && <div className="link-text text-xs no-print" onClick={() => window.open(f.originalUrl, '_blank')}>Visit Original Website →</div>}
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* --- CATEGORY VIEW --- */}
+              {/* --- 4. CATEGORY VIEW --- */}
               {view === 'category' && selectedCategory && (
                 <div id="pdf-content" className="max-w-6xl mx-auto px-6 py-24 text-left">
                   <div className="flex justify-between items-center mb-16 no-print">
                     <button onClick={() => setView('home')} className="text-[11px] font-bold uppercase text-gray-400 mr-4">← Index</button>
-                    <button onClick={saveAsLayoutPDF} className="pill-btn pill-btn-black">Download PDF</button>
-                    <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+                    <div className="flex gap-3">
+                        <button onClick={saveAsLayoutPDF} className="pill-btn pill-btn-black">Download PDF</button>
+                        <button onClick={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }} className={`pill-btn ${isSelectMode ? 'pill-btn-black' : 'pill-btn-outline'}`}>{isSelectMode ? 'Cancel' : 'Select'}</button>
+                        {isSelectMode && <button onClick={() => { const catIds = screenshots.filter(s => s.category === selectedCategoryId).map(s => s.id); setSelectedIds(selectedIds.length === catIds.length ? [] : catIds); }} className="pill-btn pill-btn-outline">Select All</button>}
+                    </div>
                   </div>
                   <h2 className="text-7xl italic font-light tracking-tighter text-gray-900 mb-20">{selectedCategory.name}</h2>
                   <div className="space-y-16">
@@ -245,12 +244,7 @@
                         </div>
                         <div className="w-full md:w-2/5 pt-4">
                             <p className="text-xl font-serif italic text-gray-700 leading-relaxed mb-4">{s.note || 'No description added.'}</p>
-                            {s.originalUrl && (
-                                <p className="mb-2">
-                                    <a href={s.originalUrl} target="_blank" className="link-text text-sm font-sans font-bold">원본 웹사이트 링크 바로가기</a>
-                                </p>
-                            )}
-                            <p className="text-[10px] uppercase tracking-widest text-gray-300 font-bold">{new Date(s.date).toLocaleDateString()}</p>
+                            {s.originalUrl && <div className="link-text text-sm font-sans font-bold no-print" onClick={() => window.open(s.originalUrl, '_blank')}>원본 웹사이트 바로가기</div>}
                         </div>
                       </div>
                     ))}
